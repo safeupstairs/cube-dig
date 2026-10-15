@@ -4865,9 +4865,14 @@ function hideIntro(markSeen = true) {
   els.intro.classList.add('hidden');
   els.intro.setAttribute('aria-hidden', 'true');
   if (markSeen) markIntroSeen();
-  // First tip only after the story intro is dismissed — never under/over it
-  showTutorial('start_chop');
-  flushTutorialQueue();
+  // Defer so intro is fully gone; open first tip directly (don't rely on queue)
+  requestAnimationFrame(() => {
+    tutorialQueue = tutorialQueue.filter((id) => id !== 'start_chop');
+    if (state && !(state.tutorials && state.tutorials.start_chop)) {
+      openTutorialPopup('start_chop');
+    }
+    flushTutorialQueue();
+  });
 }
 
 /** Status line always; story intro first, then start_chop tip if still needed. */
