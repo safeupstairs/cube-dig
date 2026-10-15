@@ -19,18 +19,19 @@ export const TILES = {
   empty: { name: 'Shaft', color: '#1a2228', diggable: false, hardness: 0 },
   sky: { name: 'Sky', color: '#6a9ec8', diggable: false, hardness: 0 },
   // Coins come from Market sales only — digs drop resources / ◆, never coins.
-  grass: { name: 'Grass', color: '#4a7a48', edge: '#3a6238', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
-  dirt: { name: 'Dirt', color: '#6b4a32', edge: '#543a28', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
-  stone: { name: 'Stone', color: '#6a7078', edge: '#50565e', diggable: true, hardness: 11, drops: { stone: 1 }, coins: 0 },
-  coal: { name: 'Coal', color: '#2a2e34', edge: '#1a1e24', diggable: true, hardness: 15, drops: { coal: 1 }, coins: 0 },
-  iron: { name: 'Iron ore', color: '#8a6a5a', edge: '#6a4a3a', diggable: true, hardness: 20, drops: { iron: 1 }, coins: 0 },
-  gold: { name: 'Gold ore', color: '#c4a35a', edge: '#a4843a', diggable: true, hardness: 28, drops: { gold: 1 }, coins: 0 },
-  crystal: { name: 'Crystal', color: '#6a8cae', edge: '#4a6c8e', diggable: true, hardness: 38, drops: { crystal: 1 }, coins: 0 },
+  grass: { name: 'Grass', color: '#4a8a42', edge: '#2e6230', hi: '#6aaa58', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
+  dirt: { name: 'Dirt', color: '#6b4a32', edge: '#4a3018', hi: '#8a6240', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
+  stone: { name: 'Stone', color: '#6a7078', edge: '#484e56', hi: '#8a9098', diggable: true, hardness: 11, drops: { stone: 1 }, coins: 0 },
+  coal: { name: 'Coal', color: '#2a2e34', edge: '#14181c', hi: '#4a4e54', diggable: true, hardness: 15, drops: { coal: 1 }, coins: 0 },
+  iron: { name: 'Iron ore', color: '#8a6a5a', edge: '#5a3a2a', hi: '#b09080', diggable: true, hardness: 20, drops: { iron: 1 }, coins: 0 },
+  gold: { name: 'Gold ore', color: '#c4a35a', edge: '#8a6830', hi: '#e8d48a', diggable: true, hardness: 28, drops: { gold: 1 }, coins: 0 },
+  crystal: { name: 'Crystal', color: '#6a8cae', edge: '#3a5c7e', hi: '#9ab8d8', diggable: true, hardness: 38, drops: { crystal: 1 }, coins: 0 },
   // Shell: fragments only — ◆ come from seals, core, and prestige depth grants
   shell: {
     name: 'Cube shell',
     color: '#5a4a6a',
-    edge: '#3a2a4a',
+    edge: '#2a1a3a',
+    hi: '#7a6a8a',
     diggable: true,
     hardness: 45,
     drops: { fragment: 1 },
@@ -40,7 +41,8 @@ export const TILES = {
   seal: {
     name: 'Seal',
     color: '#c45c4a',
-    edge: '#8a3028',
+    edge: '#6a2018',
+    hi: '#e88a70',
     diggable: true,
     hardness: 100,
     drops: { fragment: 2 },
@@ -50,14 +52,15 @@ export const TILES = {
   core: {
     name: 'Core',
     color: '#e8d48a',
-    edge: '#c4a35a',
+    edge: '#a4843a',
+    hi: '#fff0c0',
     diggable: true,
     hardness: 140,
     drops: {},
     coins: 0,
     shards: 4,
   },
-  tree: { name: 'Tree', color: '#2f5a32', edge: '#1e3a22', diggable: true, hardness: 3, drops: { wood: 2 }, coins: 0 },
+  tree: { name: 'Tree', color: '#2f5a32', edge: '#1e3a22', hi: '#5a9a4a', diggable: true, hardness: 3, drops: { wood: 2 }, coins: 0 },
 };
 
 export const RESOURCE_META = {

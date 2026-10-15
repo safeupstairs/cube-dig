@@ -48,6 +48,94 @@ export function createRenderer(canvas) {
     ctx.fillRect(ox + x, oy + y, w, h);
   }
 
+  /** Deterministic cheap hash for dither / speckles (tile-local). */
+  function hash2(x, y) {
+    let n = (x * 374761393 + y * 668265263) | 0;
+    n = (n ^ (n >>> 13)) * 1274126177;
+    return (n ^ (n >>> 16)) >>> 0;
+  }
+
+  /**
+   * Cozy detailed pixel fill: base + dither dots + edge bevel + optional veins.
+   * Keeps fillRect batching cheap — only a few small rects per tile.
+   */
+  function drawTexturedTile(px, py, cw, ch, tw, x, y, def, id) {
+    const base = def.color;
+    const edge = def.edge || base;
+    const hi = def.hi || base;
+    ctx.fillStyle = base;
+    ctx.fillRect(px, py, cw, ch);
+
+    const cell = Math.max(2, Math.floor(tw / 8));
+    const h0 = hash2(x, y);
+    // Checker dither midtones
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const bit = (h0 >> ((row * 4 + col) & 31)) & 1;
+        if (!bit) continue;
+        if (((x + col + y + row) & 1) === 0) continue;
+        ctx.fillStyle = edge;
+        ctx.fillRect(px + col * cell, py + row * cell, Math.max(1, cell - 1), Math.max(1, cell - 1));
+      }
+    }
+    // Highlight speckles
+    const h1 = hash2(x * 3 + 7, y * 5 + 11);
+    for (let i = 0; i < 3; i++) {
+      if (((h1 >> (i * 5)) & 7) < 3) continue;
+      const sx = ((h1 >> (i * 3)) & 7) / 8;
+      const sy = ((h1 >> (i * 4 + 2)) & 7) / 8;
+      ctx.fillStyle = hi;
+      ctx.fillRect(px + sx * cw, py + sy * ch, Math.max(1, cell * 0.6), Math.max(1, cell * 0.6));
+    }
+
+    // Beveled edges (stone / wood feel)
+    ctx.fillStyle = hi;
+    ctx.fillRect(px, py, cw, Math.max(1, Math.floor(ch * 0.08)));
+    ctx.fillRect(px, py, Math.max(1, Math.floor(cw * 0.08)), ch);
+    ctx.fillStyle = edge;
+    ctx.fillRect(px, py + ch - Math.max(2, Math.floor(ch * 0.14)), cw, Math.max(2, Math.floor(ch * 0.14)));
+    ctx.fillRect(px + cw - Math.max(2, Math.floor(cw * 0.12)), py, Math.max(2, Math.floor(cw * 0.12)), ch);
+
+    // Ore / special veins
+    if (id === 'coal' || id === 'iron' || id === 'gold' || id === 'crystal') {
+      const vein = id === 'gold' ? '#fff0c0' : id === 'crystal' ? '#b8d8f0' : id === 'iron' ? '#c0a090' : '#4a5058';
+      const vh = hash2(x + 19, y + 23);
+      ctx.fillStyle = vein;
+      ctx.fillRect(px + ((vh & 7) / 8) * cw * 0.7, py + (((vh >> 3) & 7) / 8) * ch * 0.6, Math.max(2, cw * 0.22), Math.max(1, ch * 0.1));
+      if ((vh & 3) === 0) {
+        ctx.fillRect(px + cw * 0.55, py + ch * 0.4, Math.max(1, cw * 0.12), Math.max(2, ch * 0.28));
+      }
+    }
+
+    if (id === 'grass') {
+      // Tufts along the top edge
+      ctx.fillStyle = hi;
+      ctx.fillRect(px + cw * 0.15, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.2));
+      ctx.fillRect(px + cw * 0.45, py, Math.max(1, cw * 0.1), Math.max(2, ch * 0.22));
+      ctx.fillRect(px + cw * 0.72, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.18));
+      ctx.fillStyle = edge;
+      ctx.fillRect(px, py + ch * 0.55, cw, ch * 0.45);
+    }
+  }
+
+  function drawPineTree(px, py, tw) {
+    const s = tw / 16;
+    // Trunk
+    pxRect(px, py, 7 * s, 10 * s, 2 * s, 5 * s, '#5a3a22');
+    pxRect(px, py, 6 * s, 14 * s, 4 * s, 1 * s, '#4a2e18');
+    // Layered pine canopy (dark → mid → tip highlight)
+    pxRect(px, py, 4 * s, 8 * s, 8 * s, 3 * s, '#1e4a24');
+    pxRect(px, py, 3 * s, 9 * s, 10 * s, 2 * s, '#2a5a28');
+    pxRect(px, py, 5 * s, 5 * s, 6 * s, 4 * s, '#2f6a32');
+    pxRect(px, py, 4 * s, 6 * s, 8 * s, 2 * s, '#3a7a3a');
+    pxRect(px, py, 6 * s, 2 * s, 4 * s, 4 * s, '#3f8a3a');
+    pxRect(px, py, 7 * s, 1 * s, 2 * s, 2 * s, '#5aaa4a');
+    // Needle highlights
+    pxRect(px, py, 6 * s, 3 * s, 1 * s, 1 * s, '#7aca68');
+    pxRect(px, py, 8 * s, 6 * s, 1 * s, 1 * s, '#6aba58');
+    pxRect(px, py, 5 * s, 8 * s, 1 * s, 1 * s, '#4a8a40');
+  }
+
   function drawWorker(px, py, tw, wkr, selected, number = 0) {
     const tired = wkr.resting || wkr.energy <= 0;
     const hurt = (wkr.vitality || 0) > 0 && (wkr.vitality || 0) < 22;
@@ -69,6 +157,7 @@ export function createRenderer(canvas) {
     // Soft amber tint when orders can't find a dig
     const body = tired ? '#6a6a6a' : hurt ? '#c4a090' : blocked ? '#d8c070' : '#e8d4a8';
     const tunic = tired ? '#4a4a5a' : blocked ? '#5a4a28' : '#3a5a8a';
+    const hat = tired ? '#7a7a50' : '#d4b830';
 
     if (selected) {
       ctx.strokeStyle = '#e8d48a';
@@ -76,9 +165,19 @@ export function createRenderer(canvas) {
       ctx.strokeRect(px + 1, py + 1, tw - 2, tw - 2);
       ctx.lineWidth = 1;
     }
-    // body (bobs while digging)
-    pxRect(px, py, 5 * s, (3 - bobY) * s, 6 * s, 4 * s, body);
+    // Hard hat + face (bobs while digging)
+    pxRect(px, py, 5 * s, (2 - bobY) * s, 6 * s, 2 * s, hat);
+    pxRect(px, py, 4 * s, (3 - bobY) * s, 8 * s, 1 * s, hat);
+    pxRect(px, py, 5 * s, (4 - bobY) * s, 6 * s, 3 * s, body);
+    // Eyes
+    if (!tired) {
+      pxRect(px, py, 6 * s, (5 - bobY) * s, 1 * s, 1 * s, '#1a1a1a');
+      pxRect(px, py, 9 * s, (5 - bobY) * s, 1 * s, 1 * s, '#1a1a1a');
+    }
+    // Overalls
     pxRect(px, py, 4 * s, (7 - bobY) * s, 8 * s, 6 * s, tunic);
+    pxRect(px, py, 5 * s, (8 - bobY) * s, 2 * s, 3 * s, '#2a3a5a');
+    pxRect(px, py, 9 * s, (8 - bobY) * s, 2 * s, 3 * s, '#2a3a5a');
     pxRect(px, py, 5 * s, 13 * s, 2 * s, 2 * s, '#2a2a2a');
     pxRect(px, py, 9 * s, 13 * s, 2 * s, 2 * s, '#2a2a2a');
     if (!tired) {
@@ -88,7 +187,7 @@ export function createRenderer(canvas) {
       const headX = working ? 9 + swing * 4.5 : 10;
       const headY = working ? 3.5 - bobY - swing * 3.2 : 6;
       const shaftH = working ? 4 + Math.abs(swing) * 1.5 : 5;
-      pxRect(px, py, toolX * s, toolY * s, 1 * s, shaftH * s, '#9a9a9a');
+      pxRect(px, py, toolX * s, toolY * s, 1 * s, shaftH * s, '#c4a35a');
       pxRect(px, py, headX * s, headY * s, 4 * s, 2 * s, impact ? '#e8e0c8' : '#6a6a6a');
       // Brief tool flash on impact peak
       if (impact) {
@@ -159,22 +258,27 @@ export function createRenderer(canvas) {
     pxRect(px, py, 1 * s, 14 * s, 14 * s, 2 * s, '#2a2218');
 
     if (id === 'shack') {
-      // wood walls
+      // wood walls + grain
       pxRect(px, py, 2 * s, 6 * s, 12 * s, 8 * s, '#8a6040');
+      pxRect(px, py, 2 * s, 7 * s, 12 * s, 1 * s, '#7a5030');
+      pxRect(px, py, 2 * s, 10 * s, 12 * s, 1 * s, '#7a5030');
       pxRect(px, py, 2 * s, 6 * s, 12 * s, 1 * s, '#6a4428');
       // roof
       pxRect(px, py, 1 * s, 4 * s, 14 * s, 2 * s, '#5a3020');
       pxRect(px, py, 3 * s, 3 * s, 10 * s, 1 * s, '#4a2818');
+      pxRect(px, py, 2 * s, 4 * s, 1 * s, 2 * s, '#7a4830');
       // door
       pxRect(px, py, 6 * s, 9 * s, 4 * s, 5 * s, '#3a2210');
       pxRect(px, py, 8 * s, 11 * s, 1 * s, 1 * s, '#c4a35a');
-      // window
-      pxRect(px, py, 3 * s, 8 * s, 2 * s, 2 * s, '#c8d8e8');
+      // window glow
+      pxRect(px, py, 3 * s, 8 * s, 2 * s, 2 * s, '#e8d48a');
       pxRect(px, py, 11 * s, 8 * s, 2 * s, 2 * s, '#c8d8e8');
     } else if (id === 'mine') {
-      // drill frame
+      // drill frame + rivets
       pxRect(px, py, 3 * s, 5 * s, 10 * s, 9 * s, '#4a4a58');
       pxRect(px, py, 4 * s, 4 * s, 8 * s, 2 * s, '#6a6a78');
+      pxRect(px, py, 4 * s, 6 * s, 1 * s, 1 * s, '#8a8a98');
+      pxRect(px, py, 11 * s, 6 * s, 1 * s, 1 * s, '#8a8a98');
       // bore bit
       const glow = idle ? '#c45c4a' : '#6a9e6a';
       pxRect(px, py, 7 * s, 8 * s, 2 * s, 6 * s, '#2a2a32');
@@ -191,6 +295,7 @@ export function createRenderer(canvas) {
       // furnace body (surface camp)
       pxRect(px, py, 3 * s, 7 * s, 10 * s, 7 * s, '#6a3830');
       pxRect(px, py, 4 * s, 8 * s, 8 * s, 5 * s, '#8a4030');
+      pxRect(px, py, 4 * s, 8 * s, 8 * s, 1 * s, '#a05038');
       // chimney
       pxRect(px, py, 10 * s, 2 * s, 3 * s, 6 * s, '#4a2a28');
       pxRect(px, py, 9 * s, 2 * s, 5 * s, 1 * s, '#3a1a18');
@@ -207,14 +312,19 @@ export function createRenderer(canvas) {
         2 * s,
         lit ? (flame > 0.45 ? '#e8a030' : '#c45c4a') : '#3a2018'
       );
+      if (lit && flame > 0.7) {
+        pxRect(px, py, 6.5 * s, 10 * s, 1 * s, 1 * s, '#fff0a0');
+      }
       // smoke puff while working
       if (lit && flame > 0.55) {
         pxRect(px, py, 11 * s, 0 * s, 2 * s, 2 * s, '#6a6a6a');
+        pxRect(px, py, 12 * s, 0 * s, 1 * s, 1 * s, '#8a8a8a');
       }
     } else if (id === 'grove') {
       // nursery hut
       pxRect(px, py, 4 * s, 7 * s, 9 * s, 7 * s, '#4a8a4a');
       pxRect(px, py, 4 * s, 6 * s, 9 * s, 1 * s, '#2a5a2a');
+      pxRect(px, py, 5 * s, 8 * s, 2 * s, 2 * s, '#e8d48a');
       // planter beds
       pxRect(px, py, 1 * s, 11 * s, 4 * s, 2 * s, '#5a3a22');
       pxRect(px, py, 2 * s, 10 * s, 1 * s, 2 * s, '#6a9a5a');
@@ -227,6 +337,7 @@ export function createRenderer(canvas) {
       // canvas stall + counter (village market)
       pxRect(px, py, 2 * s, 8 * s, 12 * s, 6 * s, '#6a5040');
       pxRect(px, py, 3 * s, 9 * s, 10 * s, 4 * s, '#8a6a48');
+      pxRect(px, py, 3 * s, 9 * s, 10 * s, 1 * s, '#9a7a58');
       // awning posts
       pxRect(px, py, 2 * s, 4 * s, 1 * s, 5 * s, '#5a3a22');
       pxRect(px, py, 13 * s, 4 * s, 1 * s, 5 * s, '#5a3a22');
@@ -248,7 +359,7 @@ export function createRenderer(canvas) {
       pxRect(px, py, 2 * s, 5 * s, 12 * s, 2 * s, '#5a3020');
       pxRect(px, py, 4 * s, 4 * s, 8 * s, 1 * s, '#4a2818');
       pxRect(px, py, 7 * s, 10 * s, 3 * s, 4 * s, '#3a2210');
-      pxRect(px, py, 4 * s, 9 * s, 2 * s, 2 * s, '#c8d8e8');
+      pxRect(px, py, 4 * s, 9 * s, 2 * s, 2 * s, '#e8d48a');
       pxRect(px, py, 11 * s, 9 * s, 1 * s, 2 * s, '#c8d8e8');
       // flower box
       pxRect(px, py, 1 * s, 12 * s, 2 * s, 2 * s, '#5a3a22');
@@ -274,6 +385,8 @@ export function createRenderer(canvas) {
     } else if (id === 'chapel') {
       // stone clinic / chapel
       pxRect(px, py, 2 * s, 7 * s, 12 * s, 7 * s, '#7a6a58');
+      pxRect(px, py, 3 * s, 8 * s, 1 * s, 1 * s, '#9a8a78');
+      pxRect(px, py, 12 * s, 10 * s, 1 * s, 1 * s, '#5a4a3a');
       pxRect(px, py, 3 * s, 5 * s, 10 * s, 2 * s, '#5a4a3a');
       pxRect(px, py, 7 * s, 2 * s, 2 * s, 4 * s, '#c4a35a');
       pxRect(px, py, 5 * s, 3 * s, 6 * s, 1 * s, '#c4a35a');
@@ -286,11 +399,15 @@ export function createRenderer(canvas) {
       pxRect(px, py, 5 * s, 3 * s, 6 * s, 3 * s, '#5a4860');
       const glow = 0.45 + 0.55 * Math.sin(t * 3);
       pxRect(px, py, 6 * s, 4 * s, 4 * s, 2 * s, glow > 0.6 ? '#e8d48a' : '#c4a35a');
+      if (glow > 0.55) {
+        pxRect(px, py, 5 * s, 5 * s, 6 * s, 1 * s, 'rgba(232,212,138,0.35)');
+      }
       pxRect(px, py, 4 * s, 13 * s, 8 * s, 1 * s, '#2a2228');
     } else if (id === 'pump') {
       // shaft pump — tank + pipe (chug only while draining water)
       pxRect(px, py, 3 * s, 6 * s, 10 * s, 8 * s, '#4a6a7a');
       pxRect(px, py, 4 * s, 7 * s, 8 * s, 5 * s, '#3a5a68');
+      pxRect(px, py, 4 * s, 7 * s, 8 * s, 1 * s, '#6a8a98');
       pxRect(px, py, 6 * s, 3 * s, 4 * s, 4 * s, '#5a7a88');
       pxRect(px, py, 7 * s, 1 * s, 2 * s, 3 * s, '#2a3a48');
       const working = !!b.pumpWorking;
@@ -302,7 +419,7 @@ export function createRenderer(canvas) {
       pxRect(px, py, 2 * s, 4 * s, 12 * s, 10 * s, b.def?.color || '#5a5a5a');
     }
 
-    ctx.strokeStyle = '#111';
+    ctx.strokeStyle = '#1a1410';
     ctx.strokeRect(px + 0.5, py + 0.5, tw - 1, tw - 1);
   }
 
@@ -431,9 +548,12 @@ export function createRenderer(canvas) {
       g.addColorStop(0.35, '#2e3e4c');
       g.addColorStop(1, '#0e1418');
     } else {
-      g.addColorStop(0, '#7eb3d9');
-      g.addColorStop(0.35, '#4a6a78');
-      g.addColorStop(1, '#12181c');
+      // Cozy dig sky — warmer near horizon
+      g.addColorStop(0, '#6aa8d0');
+      g.addColorStop(0.22, '#8ab8c8');
+      g.addColorStop(0.42, '#5a7a78');
+      g.addColorStop(0.62, '#2a3a40');
+      g.addColorStop(1, '#0e1418');
     }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
@@ -443,6 +563,10 @@ export function createRenderer(canvas) {
     } else if (phase === 'warn') {
       ctx.fillStyle = 'rgba(40, 50, 58, 0.16)';
       ctx.fillRect(0, 0, w, h * 0.38);
+    } else {
+      // Soft sun wash
+      ctx.fillStyle = 'rgba(255, 220, 160, 0.06)';
+      ctx.fillRect(0, 0, w, h * 0.28);
     }
 
     const world = state.world;
@@ -472,11 +596,16 @@ export function createRenderer(canvas) {
         const ch = Math.ceil(tw);
 
         if (!revealed) {
-          ctx.fillStyle = '#0a0c0e';
+          ctx.fillStyle = '#080a0c';
           ctx.fillRect(px, py, cw, ch);
-          if (((x * 17 + y * 31) & 7) === 0) {
-            ctx.fillStyle = '#151a1e';
-            ctx.fillRect(px + cw * 0.4, py + ch * 0.4, 2, 2);
+          const fogH = hash2(x, y);
+          if ((fogH & 7) === 0) {
+            ctx.fillStyle = '#12161a';
+            ctx.fillRect(px + cw * 0.35, py + ch * 0.4, Math.max(1, cw * 0.15), Math.max(1, ch * 0.12));
+          }
+          if ((fogH & 15) === 3) {
+            ctx.fillStyle = 'rgba(40, 50, 60, 0.35)';
+            ctx.fillRect(px + cw * 0.2, py + ch * 0.55, Math.max(1, cw * 0.2), 1);
           }
           continue;
         }
@@ -489,16 +618,30 @@ export function createRenderer(canvas) {
         if (id === 'empty') {
           const wet = tileFlooded(x, y);
           const wetTop = wet && tileFloodSurface(x, y);
+          const deep = y > world.surfaceY + 8;
           ctx.fillStyle = wet
             ? wetTop
               ? '#2a4860'
-              : y > world.surfaceY + 8
+              : deep
                 ? '#152838'
                 : '#1a3040'
-            : y > world.surfaceY + 8
-              ? '#141a20'
-              : '#1c262e';
+            : deep
+              ? '#12181e'
+              : '#1a242c';
           ctx.fillRect(px, py, cw, ch);
+          // Shaft wall dither / timber hints
+          if (!wet) {
+            const sh = hash2(x + 3, y + 9);
+            if ((sh & 7) === 0) {
+              ctx.fillStyle = deep ? '#1a2228' : '#243038';
+              ctx.fillRect(px + cw * 0.1, py + ch * 0.3, Math.max(1, cw * 0.12), Math.max(1, ch * 0.08));
+            }
+            if (deep && (sh & 15) === 2) {
+              // Timber brace silhouette
+              ctx.fillStyle = '#3a2a1a';
+              ctx.fillRect(px + 1, py + ch * 0.4, Math.max(1, cw * 0.08), Math.max(2, ch * 0.35));
+            }
+          }
           if (wet) {
             if (wetTop) {
               // Surface only — darker top bar + shimmer (not on submerged tiles)
@@ -520,31 +663,16 @@ export function createRenderer(canvas) {
               }
             }
           }
-          ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+          ctx.strokeStyle = 'rgba(255,255,255,0.035)';
           ctx.strokeRect(px + 0.5, py + 0.5, tw - 1, tw - 1);
           continue;
         }
 
-        // Trees sit on the sky pad — foliage/trunk only (sky shows through, no green plate)
+        // Trees sit on the sky pad — pine silhouette (sky shows through)
         if (id === 'tree') {
-          const leaf = '#3f7a3a';
-          const leafDark = '#2a5a28';
-          ctx.fillStyle = leaf;
-          ctx.fillRect(px + tw * 0.28, py + tw * 0.08, tw * 0.44, tw * 0.28);
-          ctx.fillRect(px + tw * 0.18, py + tw * 0.2, tw * 0.28, tw * 0.22);
-          ctx.fillRect(px + tw * 0.54, py + tw * 0.2, tw * 0.28, tw * 0.22);
-          ctx.fillStyle = leafDark;
-          ctx.fillRect(px + tw * 0.34, py + tw * 0.16, tw * 0.32, tw * 0.18);
-          ctx.fillStyle = '#5a3a22';
-          ctx.fillRect(px + tw * 0.42, py + tw * 0.42, tw * 0.16, tw * 0.5);
+          drawPineTree(px, py, tw);
         } else {
-          ctx.fillStyle = def.color;
-          ctx.fillRect(px, py, cw, ch);
-          if (def.edge) {
-            ctx.fillStyle = def.edge;
-            ctx.fillRect(px, py + ch - 3, cw, 3);
-            ctx.fillRect(px + cw - 3, py, 3, ch);
-          }
+          drawTexturedTile(px, py, cw, ch, tw, x, y, def, id);
         }
 
         if (id === 'seal' || id === 'core') {
@@ -566,6 +694,20 @@ export function createRenderer(canvas) {
           ctx.lineTo(px + tw * 0.8, py + tw * 0.25);
           ctx.stroke();
         }
+      }
+    }
+
+    // Depth mist — soft fog rising from deep shaft (mockup atmosphere)
+    {
+      const mistTop = worldToScreen(cam.x, world.surfaceY + 10, shake);
+      const mistBot = worldToScreen(cam.x, world.surfaceY + 40, shake);
+      if (mistBot.y > 0 && mistTop.y < h) {
+        const mist = ctx.createLinearGradient(0, Math.max(0, mistTop.y), 0, Math.min(h, mistBot.y + h * 0.35));
+        mist.addColorStop(0, 'rgba(180, 200, 210, 0)');
+        mist.addColorStop(0.45, 'rgba(160, 180, 195, 0.06)');
+        mist.addColorStop(1, 'rgba(140, 165, 185, 0.14)');
+        ctx.fillStyle = mist;
+        ctx.fillRect(0, Math.max(0, mistTop.y), w, h);
       }
     }
 
