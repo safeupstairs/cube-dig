@@ -557,6 +557,7 @@ export function createRenderer(canvas) {
    * @param {Array<object>} [opts.buildingRadii]
    * @param {Array<object>} [opts.drillRadii] legacy alias
    * @param {{tier:number,cx:number,cy:number,rx:number,ry:number}|null} [opts.echoSense]
+   * @param {{uid:string,x:number,y:number,ok:boolean,moved?:boolean}|null} [opts.workerDrop]
    */
   function draw(state, hover, fx, opts = null) {
     const selectedWorkerId =
@@ -567,6 +568,8 @@ export function createRenderer(canvas) {
       typeof opts === 'object' && opts
         ? opts.buildingRadii || opts.drillRadii || []
         : [];
+    const workerDrop =
+      typeof opts === 'object' && opts ? opts.workerDrop || null : null;
 
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
@@ -818,9 +821,36 @@ export function createRenderer(canvas) {
     }
 
     state.workers.forEach((wkr, i) => {
+      const draggingThis = workerDrop && workerDrop.uid === wkr.uid && workerDrop.moved;
+      if (draggingThis) {
+        // Dim original while the ghost follows the pointer
+        ctx.globalAlpha = 0.35;
+      }
       const s = worldToScreen(wkr.x, wkr.y, shake);
       drawWorker(s.x, s.y, tw, wkr, wkr.uid === selectedWorkerId, i + 1);
+      if (draggingThis) ctx.globalAlpha = 1;
     });
+
+    // Drag-drop ghost + tile validity
+    if (workerDrop && workerDrop.moved) {
+      const ds = worldToScreen(workerDrop.x, workerDrop.y, shake);
+      const dx = Math.floor(ds.x);
+      const dy = Math.floor(ds.y);
+      ctx.fillStyle = workerDrop.ok
+        ? 'rgba(106, 158, 106, 0.35)'
+        : 'rgba(196, 92, 74, 0.35)';
+      ctx.fillRect(dx, dy, Math.ceil(tw), Math.ceil(tw));
+      ctx.strokeStyle = workerDrop.ok ? '#6a9e6a' : '#c45c4a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx + 1, dy + 1, Math.ceil(tw) - 2, Math.ceil(tw) - 2);
+      ctx.lineWidth = 1;
+      const ghost = state.workers.find((w) => w.uid === workerDrop.uid);
+      if (ghost) {
+        ctx.globalAlpha = 0.85;
+        drawWorker(dx, dy, tw, ghost, true, 0);
+        ctx.globalAlpha = 1;
+      }
+    }
 
     if (fx) {
       for (const p of fx.particles) {

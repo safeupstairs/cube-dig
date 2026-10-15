@@ -467,6 +467,10 @@ body {
   cursor: copy;
 }
 
+#world.cursor-worker-drag {
+  cursor: grabbing;
+}
+
 .dock {
   /* Overlay the dig canvas — opening panels must not resize the world */
   position: absolute;

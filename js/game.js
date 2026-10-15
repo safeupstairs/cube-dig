@@ -160,6 +160,8 @@ let worldTipKey = '';
 let dragging = false;
 let dragMoved = false;
 let lastPan = null;
+/** Dragging an existing digger to a new walkable tile (not camera pan). */
+let workerDrag = null;
 /** Only dig/place when the press started on the canvas (not dock/hotbar). */
 let canvasPress = false;
 /** Active canvas pointers (pointerId → client coords) for pinch + pan. */
@@ -303,8 +305,13 @@ function updateWorldCursor() {
     'cursor-dig-axe',
     'cursor-place',
     'cursor-demolish',
-    'cursor-hire'
+    'cursor-hire',
+    'cursor-worker-drag'
   );
+  if (workerDrag) {
+    canvas.classList.add('cursor-worker-drag');
+    return;
+  }
   if (tool === 'demolish') {
     canvas.classList.add('cursor-demolish');
     return;
@@ -947,44 +954,70 @@ function ensureWorkerDigHeading(w) {
   return h;
 }
 
+/**
+ * Widen work row: shallowest Y that is not yet PRESTIGE_MIN_COLUMNS-wide
+ * (columns open from surface through y). Finish that row before going deeper.
+ */
+function widenWorkDepth(world) {
+  const floor = deepestEmptyY(world);
+  const maxY = Math.min(
+    world.h - 1,
+    Math.max(floor + 1, prestigeUnlockDepthY(world) + 2)
+  );
+  for (let y = world.surfaceY + 1; y <= maxY; y++) {
+    if (countColumnsOpenToDepth(world, y) < PRESTIGE_MIN_COLUMNS) return y;
+  }
+  // Already 3-wide through maxY — next step is one level deeper
+  return Math.min(world.h - 1, maxY + 1);
+}
+
 /** Score bias for findTarget based on digger heading. */
 function headingScoreBias(headingId, workerSy) {
   const world = state.world;
   const cubeX = world.cubeCx ?? world.centerX;
   const cubeY = world.cubeCy ?? world.centerY;
   if (headingId === 'widen') {
-    // Aim at prestige width: open more columns from surface down to the gate depth,
-    // growing sideways from columns that already count — not just local side-pecks.
-    const needY = prestigeUnlockDepthY(world);
-    const colsOpen = countColumnsOpenToDepth(world, needY);
-    const needMore = colsOpen < PRESTIGE_MIN_COLUMNS;
-    const openAtGate = new Uint8Array(world.w);
+    // Loop: make row workY 3-wide → step down one → repeat
+    const workY = widenWorkDepth(world);
+    const wideEnough = countColumnsOpenToDepth(world, workY) >= PRESTIGE_MIN_COLUMNS;
+    const openAtWork = new Uint8Array(world.w);
     for (let x = 0; x < world.w; x++) {
-      if (columnOpenToSurface(world, x, needY)) openAtGate[x] = 1;
+      if (columnOpenToSurface(world, x, workY)) openAtWork[x] = 1;
+    }
+    // Columns already open one row up — grow from those when extending deeper
+    const openAbove = new Uint8Array(world.w);
+    if (workY > world.surfaceY) {
+      for (let x = 0; x < world.w; x++) {
+        if (columnOpenToSurface(world, x, workY - 1)) openAbove[x] = 1;
+      }
     }
     return (nx, ny, x) => {
       let score = 0;
-      if (nx !== x) score += 14;
-      else score -= 10; // same-column deepen fights widening
 
-      const inGateBand = ny >= world.surfaceY && ny <= needY;
-      const colDone = openAtGate[nx] === 1;
+      // Don't skip ahead — finish this row before digging deeper
+      if (ny > workY) score -= 50;
 
-      if (needMore && inGateBand && !colDone) {
-        score += 40;
-        const besideOpen =
-          (nx > 0 && openAtGate[nx - 1]) ||
-          (nx + 1 < world.w && openAtGate[nx + 1]);
-        if (besideOpen) score += 32;
-        // Prefer clearing higher in the column (top-down toward a full open shaft)
-        score += Math.max(0, 14 - (ny - world.surfaceY) * 0.2);
-      } else if (!needMore && nx !== x) {
-        // Gate met — keep fattening near current depth for breadth ◆
-        score += 8 + Math.max(0, 12 - Math.abs(ny - workerSy) * 3);
+      if (!wideEnough) {
+        // 1) Extend the shaft under columns already open one row up
+        if (ny === workY && openAbove[nx] === 1) score += 52;
+        // 2) Open new columns at/above workY beside ones that already count
+        if (ny <= workY && openAtWork[nx] !== 1) {
+          score += 28;
+          const beside =
+            (nx > 0 && (openAtWork[nx - 1] || openAbove[nx - 1])) ||
+            (nx + 1 < world.w && (openAtWork[nx + 1] || openAbove[nx + 1]));
+          if (beside) score += 40;
+          score += Math.max(0, 18 - Math.abs(ny - workY) * 4);
+          if (nx !== x) score += 10;
+        } else if (ny === workY && openAtWork[nx] === 1) {
+          score -= 24; // already counts here — dig a side column instead
+        }
       } else {
-        score += Math.max(0, 8 - Math.abs(ny - workerSy) * 3);
-        if (ny > workerSy) score -= 6;
+        // Should be rare (workY already wide) — step down under open columns
+        if (ny === workY && openAbove[nx] === 1) score += 48;
+        else if (ny === workY) score += 20;
       }
+
       return score;
     };
   }
@@ -2113,6 +2146,32 @@ function workerAtScreen(sx, sy) {
   return best;
 }
 
+/** Move a hired digger to a walkable shaft/pad tile (drag-drop). */
+function relocateWorker(w, tx, ty) {
+  if (!w) return false;
+  if (!isWalkable(state.world, tx, ty)) {
+    setStatus('Drop diggers on a shaft tile or the surface pad.');
+    sfx.deny();
+    return false;
+  }
+  w.x = tx + 0.5;
+  w.y = ty + 0.5;
+  w.job = null;
+  w.jobBlocked = false;
+  w.resting = false;
+  w.cooldown = 0;
+  selectedWorkerId = w.uid;
+  selectedBuildingUid = null;
+  setStatus(`Moved digger to (${tx},${ty}).`);
+  sfx.place();
+  return true;
+}
+
+function clearWorkerDrag() {
+  workerDrag = null;
+  els.canvas?.classList.remove('cursor-worker-drag');
+}
+
 function buildingAtTile(tx, ty) {
   return state.buildings.find((b) => b.x === tx && b.y === ty) || null;
 }
@@ -2455,6 +2514,8 @@ function stepWorkers(dt) {
   // Iterate a copy — killWorker mutates the live list
   for (const w of [...state.workers]) {
     if (!state.workers.includes(w)) continue;
+    // Freeze while the player is drag-dropping this digger
+    if (workerDrag && workerDrag.uid === w.uid) continue;
     if (typeof w.energy !== 'number' || Number.isNaN(w.energy)) {
       w.energy = maxE;
     }
@@ -4346,6 +4407,7 @@ function onPointerDown(e) {
   // non-left pointerdown often suppresses the contextmenu event in browsers.
   if (e.button === 2) {
     clearToolToDig();
+    clearWorkerDrag();
     e.preventDefault();
   }
   // Touch: block Chromium page-scroll / browser-zoom so pinch+pan stay on the canvas
@@ -4358,8 +4420,36 @@ function onPointerDown(e) {
     /* */
   }
   if (canvasPointers.size >= 2) {
+    clearWorkerDrag();
     beginPinch();
   } else {
+    // Grab digger to reposition (dig mode only — not while placing/hiring)
+    const primary =
+      e.button === 0 || (e.pointerType === 'touch' && (e.button === -1 || e.isPrimary));
+    if (primary && !tool) {
+      const rect = els.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const hit = workerAtScreen(sx, sy);
+      if (hit) {
+        workerDrag = {
+          uid: hit.uid,
+          pointerId: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          moved: false,
+        };
+        selectedWorkerId = hit.uid;
+        selectedBuildingUid = null;
+        dragging = false;
+        dragMoved = false;
+        pinchLast = null;
+        lastPan = null;
+        els.canvas.classList.add('cursor-worker-drag');
+        syncHoverFromClient(e.clientX, e.clientY);
+        return;
+      }
+    }
     dragging = true;
     dragMoved = false;
     pinchLast = null;
@@ -4386,6 +4476,7 @@ function onPointerMove(e) {
 
   // Two-finger pinch: zoom toward midpoint (same limits as wheel)
   if (canvasPointers.size >= 2) {
+    clearWorkerDrag();
     if (!pinchLast) beginPinch();
     const sample = pinchSample();
     if (sample && pinchLast && pinchLast.dist > 1 && sample.dist > 1) {
@@ -4393,6 +4484,19 @@ function onPointerMove(e) {
       syncHoverFromClient(sample.midX, sample.midY);
     }
     pinchLast = sample;
+    return;
+  }
+
+  // Dragging a digger — move drop preview, never pan the camera
+  if (workerDrag && e.pointerId === workerDrag.pointerId) {
+    const thresh = e.pointerType === 'touch' ? 12 : 4;
+    if (
+      Math.hypot(e.clientX - workerDrag.startX, e.clientY - workerDrag.startY) > thresh
+    ) {
+      workerDrag.moved = true;
+    }
+    syncHoverFromClient(e.clientX, e.clientY);
+    updateWorldCursor();
     return;
   }
 
@@ -4444,6 +4548,39 @@ function onPointerUp(e) {
   // Touch pointerup reports button 0 (or occasionally -1 in older engines)
   const primaryUp =
     e.button === 0 || (e.pointerType === 'touch' && (e.button === -1 || e.isPrimary));
+
+  // Finish digger drag-drop before dig/pan settle
+  if (workerDrag && e.pointerId === workerDrag.pointerId) {
+    const moved = workerDrag.moved;
+    const uid = workerDrag.uid;
+    clearWorkerDrag();
+    canvasPress = false;
+    dragging = false;
+    lastPan = null;
+    pinchLast = null;
+    if (!primaryUp) return;
+    const rect = els.canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const wpos = renderer.screenToWorld(sx, sy);
+    const tx = Math.floor(wpos.x);
+    const ty = Math.floor(wpos.y);
+    const w = state.workers.find((x) => x.uid === uid);
+    if (moved && w && tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H) {
+      relocateWorker(w, tx, ty);
+      renderUi();
+      save();
+      return;
+    }
+    if (w) {
+      selectedWorkerId = w.uid;
+      const f = digFilterById(w.digFilter || 'auto');
+      setStatus(`Selected digger — digs ${f.label}. Drag to move · orders in Crew.`);
+      renderUi();
+    }
+    return;
+  }
+
   const canDig = canvasPress && !wasDrag && primaryUp;
   canvasPress = false;
   dragging = false;
@@ -4477,13 +4614,13 @@ function onPointerUp(e) {
     return;
   }
 
-  // Select digger if clicked
+  // Select digger if clicked (drag path handles grab/drop above)
   const hitWorker = workerAtScreen(sx, sy);
   if (hitWorker) {
     selectedWorkerId = hitWorker.uid;
     selectedBuildingUid = null;
     const f = digFilterById(hitWorker.digFilter || 'auto');
-    setStatus(`Selected digger — digs ${f.label}. Set orders in the dock.`);
+    setStatus(`Selected digger — digs ${f.label}. Drag to move · orders in Crew.`);
     sfx.place();
     renderUi();
     save();
@@ -4555,6 +4692,7 @@ function onPointerCancel(e) {
   dragging = false;
   lastPan = null;
   pinchLast = null;
+  clearWorkerDrag();
 }
 
 function onWheel(e) {
@@ -4646,10 +4784,16 @@ function loop(ts) {
       ry,
     };
   }
+  let workerDrop = null;
+  if (workerDrag && hover) {
+    const ok = isWalkable(state.world, hover.x, hover.y);
+    workerDrop = { uid: workerDrag.uid, x: hover.x, y: hover.y, ok, moved: workerDrag.moved };
+  }
   renderer.draw(state, hover, fx, {
     selectedWorkerId,
     buildingRadii: buildingRadiusMarkers(),
     echoSense,
+    workerDrop,
   });
   requestAnimationFrame(loop);
 }

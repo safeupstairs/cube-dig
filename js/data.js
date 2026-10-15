@@ -618,7 +618,7 @@ export const DIG_HEADINGS = [
     id: 'widen',
     label: 'Widen',
     blurb:
-      'Open side columns down to prestige depth — grow a 3-wide shaft from the dig you already have, not a straw.',
+      'Make the shaft 3-wide at the current depth, then go one level down and repeat — no straw shafts.',
   },
   {
     id: 'toward_core',
