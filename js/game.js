@@ -3619,7 +3619,7 @@ function bindHelpTips() {
           warn: phase !== 'clear',
         },
         {
-          text: `Pumps (${pumps}) dry a Manhattan radius and push the pool down. Lightning is rare and dramatic.`,
+          text: `Pumps (${pumps}) dry a Manhattan radius fast. Without them, floodwater seeps away very slowly once the rain stops.`,
           muted: true,
         },
       ];

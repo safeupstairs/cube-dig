@@ -411,7 +411,11 @@ export const WEATHER = {
   FLOOD_MAX: 16,
   /** Per pump covering a basin — must beat ~1 sky-col of rain so one pump visibly works. */
   FLOOD_DRAIN_PER_PUMP: 0.25,
-  FLOOD_CLEAR_DRAIN: 0.05,
+  /**
+   * Natural seepage while skies are clear/warning (not during rain) — tile-equivalents / sec
+   * per basin. ~1 tile / minute so floods linger without pumps but do eventually dry.
+   */
+  FLOOD_CLEAR_DRAIN: 0.015,
   /** Standing in flood outside pump cover — high enough that lingering kills, fleeing can save. */
   WET_VITALITY_PER_SEC: 3.5,
   LIGHTNING_CHECK_SEC: 9,
