@@ -4845,6 +4845,14 @@ function markIntroSeen() {
   }
 }
 
+function clearIntroSeen() {
+  try {
+    localStorage.removeItem(INTRO_SEEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 function showIntro() {
   if (!els.intro) return;
   els.intro.classList.remove('hidden');
@@ -4971,7 +4979,8 @@ function boot() {
   els.resetBtn.addEventListener('click', () => {
     if (confirm('Hard reset ALL progress including shards?')) {
       clearSave();
-      // Fresh tutorials — tips only return after hard reset
+      // Fresh tutorials + story intro — both return only after hard reset
+      clearIntroSeen();
       tutorialQueue = [];
       tutorialOpen = false;
       if (els.tutorial) {
