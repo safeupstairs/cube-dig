@@ -2,6 +2,7 @@ import {
   BUILDINGS,
   CHAPEL_HEAL_PER_SEC,
   CHAPEL_RADIUS,
+  ACHIEVEMENTS,
   DIG_FILTERS,
   DIG_HEADINGS,
   SEEN_DIG_TYPES,
@@ -18,6 +19,7 @@ import {
   WARD_DPS,
   WARD_RADIUS,
   WEATHER,
+  achievementById,
   digFilterById,
   digHeadingById,
   echoSensePulseRadii,
@@ -99,6 +101,7 @@ const els = {
   marketHint: document.getElementById('market-hint'),
   upgrades: document.getElementById('upgrades'),
   shardUpgrades: document.getElementById('shard-upgrades'),
+  achievements: document.getElementById('achievements'),
   prestigeBtn: document.getElementById('prestige-btn'),
   prestigeBlurb: document.getElementById('prestige-blurb'),
   status: document.getElementById('status'),
@@ -634,10 +637,11 @@ function blankWeather() {
   };
 }
 
-function createRunState(prestige, shardUpgrades, echoes, shards, cleared) {
+function createRunState(prestige, shardUpgrades, echoes, shards, cleared, achievements) {
   const world = generateWorld(prestige, 42 + prestige * 17);
   const run = {
-    coins: 16 + prestige * 4,
+    // Earn coins at the market — no free hire on a fresh dig
+    coins: 0,
     shards: shards || 0,
     prestige: prestige || 0,
     bags: blankBags(),
@@ -658,9 +662,35 @@ function createRunState(prestige, shardUpgrades, echoes, shards, cleared) {
     weather: blankWeather(),
     floodDepth: 0,
     floodCols: new Float32Array(world.w),
+    achievements: achievements && typeof achievements === 'object' ? { ...achievements } : {},
   };
   placeStarterVillage(run);
   return run;
+}
+
+/** Unlock a sticky milestone (survives prestige; cleared on hard reset). */
+function unlockAchievement(id) {
+  if (!state) return false;
+  if (!state.achievements) state.achievements = {};
+  if (state.achievements[id]) return false;
+  const def = achievementById(id);
+  if (!def) return false;
+  state.achievements[id] = Date.now();
+  setStatus(`★ ${def.name} — ${def.blurb}`);
+  sfx.reveal();
+  return true;
+}
+
+/** Depth / fog layer milestones — call after digs or when fog reveals types. */
+function checkDepthAchievements() {
+  if (!state?.world) return;
+  const depth = deepestClearedTowardCore(state.world);
+  if (depth > 0.01) unlockAchievement('layer_soil');
+  if (depth >= 0.08) unlockAchievement('layer_stone');
+  if (depth >= MONSTER.spawnDepthRatio) unlockAchievement('layer_dread');
+  const seen = state.seenTypes || {};
+  if (seen.coal || seen.iron || seen.gold || seen.crystal) unlockAchievement('layer_ore');
+  if (seen.shell || seen.seal || seen.core) unlockAchievement('layer_shell');
 }
 
 /** Surface pad open and free of buildings (sky row above surfaceY). */
@@ -924,6 +954,7 @@ function serialize() {
     floodCols: ensureFloodCols().length
       ? Array.from(ensureFloodCols())
       : undefined,
+    achievements: { ...(state.achievements || {}) },
   };
 }
 
@@ -1018,6 +1049,8 @@ function hydrate(data) {
       : blankWeather(),
     floodDepth: typeof data.floodDepth === 'number' ? data.floodDepth : 0,
     floodCols: null,
+    achievements:
+      data.achievements && typeof data.achievements === 'object' ? { ...data.achievements } : {},
   };
   if (Array.isArray(data.floodCols) && data.floodCols.length === state.world.w) {
     state.floodCols = Float32Array.from(data.floodCols);
@@ -1216,6 +1249,7 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
     }
   }
 
+  if (was === 'seal') unlockAchievement('first_seal');
   if (was === 'core') onCoreBroken();
   else if (fromPlayer) {
     setStatus(
@@ -1224,11 +1258,14 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
         (gained.shards ? ` · +${gained.shards}◆` : '')
     );
   }
+  refreshSeenTypes();
+  checkDepthAchievements();
   return true;
 }
 
 function onCoreBroken() {
   state.cleared = true;
+  unlockAchievement('core_opened');
   if (!state.endingShown) {
     state.endingShown = true;
     els.endingText.textContent = ENDING_TEXT;
@@ -1284,6 +1321,7 @@ function placeWorker(tx, ty) {
   });
   selectedWorkerId = uid;
   sfx.place();
+  unlockAchievement('first_hire');
   // Sticky hire only while another digger is currently hireable
   const atCap = state.workers.length >= workerCap(state);
   const nextCost = nextWorkerCost(state);
@@ -1490,13 +1528,16 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
   // Sticky place while selected; starter-only caps still clear the tool
   if (id === 'listening') {
     tool = buildingAtCap(id) ? null : tool;
+    unlockAchievement('echo_sense');
     const tier = echoSenseTier(state);
     setStatus(
       `Listening Post online — Echo Sense ${tier}: cube lies ${echoSenseCardinal()}. No fog cleared.`
     );
     renderUi();
+    save();
     return;
   }
+  if (id === 'pump') unlockAchievement('first_pump');
   if (buildingAtCap(id)) {
     tool = null;
     setStatus(`Built ${def.name} — at max. Dig / chop selected.`);
@@ -2049,6 +2090,7 @@ function setWeatherPhase(phase) {
       WEATHER.ATMOS_FLASH_MIN * 0.4 +
       Math.random() * (WEATHER.ATMOS_FLASH_MAX - WEATHER.ATMOS_FLASH_MIN);
     setStatus('Rain — water fills connected shafts from the bottom; flows under overhangs. New pits stay dry until rain or they connect.');
+    if (state.buildings.some((b) => b.id === 'pump')) unlockAchievement('storm_ready');
   }
   refreshWeatherHud();
 }
@@ -2571,6 +2613,7 @@ function stepBuildings(dt) {
         state.bags.ironBar = (state.bags.ironBar || 0) + 1;
         b.smeltIdle = false;
         b.smeltProduct = 'iron';
+        unlockAchievement('first_bar');
         sfx.buy();
         fx.floatText(b.x, b.y, '+bar', '#c4a35a');
       } else if ((state.bags.gold || 0) >= 2 && (state.bags.coal || 0) >= 1) {
@@ -2579,6 +2622,7 @@ function stepBuildings(dt) {
         state.bags.goldBar = (state.bags.goldBar || 0) + 1;
         b.smeltIdle = false;
         b.smeltProduct = 'gold';
+        unlockAchievement('first_bar');
         sfx.buy();
         fx.floatText(b.x, b.y, '+bar', '#e8d48a');
       } else {
@@ -2611,6 +2655,7 @@ function doPrestige() {
   if (!confirm('Prestige? Shaft, buildings, workers, and coins reset. Shard upgrades stay.')) {
     return;
   }
+  const hadChapel = state.buildings.some((b) => b.id === 'chapel');
   const echoes = [...state.echoes];
   let best = null;
   let bestY = -1;
@@ -2631,8 +2676,9 @@ function doPrestige() {
   const depthGrant = prestigeDepthShards(progress, breadth);
   const keepShards = state.shards + depthGrant;
   const keepShardUp = { ...state.shardUpgrades };
+  const keepAchievements = { ...(state.achievements || {}) };
   const cleared = state.cleared;
-  state = createRunState(next, keepShardUp, echoes, keepShards, cleared);
+  state = createRunState(next, keepShardUp, echoes, keepShards, cleared, keepAchievements);
   const startTier = keepShardUp.perm_start || 0;
   state.bags.wood = 4 + startTier * 2;
   state.bags.stone = 2 + startTier;
@@ -2643,8 +2689,12 @@ function doPrestige() {
   drillRadiusFlash = null;
   centerCamera();
   sfx.prestige();
+  const tips = [];
+  if (unlockAchievement('first_prestige')) tips.push('★ First prestige');
+  if (hadChapel && unlockAchievement('prestige_chapel')) tips.push('★ Blessed reset');
   setStatus(
-    `Prestige ${next}. +${depthGrant}◆ from depth (${keepShards}◆ total). The crust thins — dig again.`
+    `Prestige ${next}. +${depthGrant}◆ from depth (${keepShards}◆ total). The crust thins — dig again.` +
+      (tips.length ? ` ${tips.join(' · ')}` : '')
   );
   renderUi();
   save();
@@ -2952,7 +3002,31 @@ function renderUi() {
   els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
   els.prestigeBtn.textContent = canPrestige ? 'Prestige — ready' : 'Prestige';
 
+  renderAchievements();
   updateWorldCursor();
+}
+
+function renderAchievements() {
+  if (!els.achievements) return;
+  const got = state.achievements || {};
+  const unlocked = ACHIEVEMENTS.filter((a) => got[a.id]).length;
+  els.achievements.innerHTML = '';
+  const head = document.createElement('p');
+  head.className = 'muted achievements-count';
+  head.textContent = `Milestones ${unlocked}/${ACHIEVEMENTS.length} · kept across prestige`;
+  els.achievements.appendChild(head);
+  for (const a of ACHIEVEMENTS) {
+    const row = document.createElement('div');
+    const on = !!got[a.id];
+    row.className = 'achievement-row' + (on ? ' is-unlocked' : ' is-locked');
+    const title = document.createElement('strong');
+    title.textContent = on ? `★ ${a.name}` : a.name;
+    const blurb = document.createElement('span');
+    blurb.className = 'muted';
+    blurb.textContent = a.blurb;
+    row.append(title, blurb);
+    els.achievements.appendChild(row);
+  }
 }
 
 function focusWorker(w) {
@@ -3126,6 +3200,7 @@ function tickMarketAutoSell() {
     if (n <= 0) continue;
     const result = trySellResource(state, key, n);
     if (!result.ok) continue;
+    noteMarketSale(key);
     totalCoins += result.coins;
     parts.push(`${result.sold} ${RESOURCE_META[key]?.name || key}`);
   }
@@ -3268,6 +3343,13 @@ function renderMarketPanel() {
   }
 }
 
+function noteMarketSale(key) {
+  unlockAchievement('first_sale');
+  if (key === 'coal' || key === 'iron' || key === 'gold' || key === 'crystal') {
+    unlockAchievement('first_ore_sold');
+  }
+}
+
 function doMarketSell(key, amount) {
   if (!hasMarket()) {
     setStatus('Village market is not open yet.');
@@ -3282,6 +3364,7 @@ function doMarketSell(key, amount) {
     return;
   }
   const name = RESOURCE_META[key]?.name || key;
+  noteMarketSale(key);
   setStatus(`Sold ${result.sold} ${name} for ${result.coins}c.`);
   sfx.coin();
   save();
@@ -3368,6 +3451,8 @@ function renderOrdersPanel() {
       w.digHeading = h.id;
       w.job = null;
       w.jobBlocked = false;
+      if (h.id === 'widen') unlockAchievement('heading_widen');
+      if (h.id === 'toward_core') unlockAchievement('heading_core');
       setStatus(`Orders: head ${h.label}.`);
       sfx.buy();
       renderUi();
@@ -4164,10 +4249,11 @@ function loop(ts) {
       } else {
         // Life / energy meters tick without rebuilding the whole shop
         refreshCrewMeters();
-        if (selectedWorkerId && refreshSeenTypes()) {
+        if (refreshSeenTypes()) {
           // Fog just exposed a gated type — unlock dig filters without full shop rebuild
-          renderOrdersPanel();
+          if (selectedWorkerId) renderOrdersPanel();
         }
+        checkDepthAchievements();
       }
     }
     refreshWeatherHud();
@@ -4449,7 +4535,7 @@ function boot() {
   bindCheats();
   refreshWeatherHud();
   setStatus(
-    'Dig the shaft toward the buried cube. Diggers wear out — chapels heal life, pumps fight floods, wards fight horrors. Shell = fragments; seals & core = ◆.'
+    'No starting coins — chop trees, sell at the market, then hire. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆. Milestones live under Prestige.'
   );
   if (!isIntroSeen()) showIntro();
 

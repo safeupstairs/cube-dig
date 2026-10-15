@@ -630,6 +630,67 @@ body {
   line-height: 1.25;
 }
 
+.panel-subtitle {
+  margin: 0.85rem 0 0.35rem;
+  font-family: var(--pixel);
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+  color: var(--brass);
+}
+
+.achievements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+  max-height: 14rem;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.achievements-count {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.achievement-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.45rem;
+  border: 2px solid #0a0c0e;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #1e2430 0%, #161a22 100%);
+  box-shadow: inset 1px 1px 0 #2a323c;
+}
+
+.achievement-row strong {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.achievement-row span {
+  font-size: 0.85rem;
+  line-height: 1.25;
+}
+
+.achievement-row.is-unlocked {
+  border-color: var(--brass-lo);
+  box-shadow:
+    0 0 0 1px rgba(196, 163, 90, 0.25),
+    inset 1px 1px 0 #3a4250;
+}
+
+.achievement-row.is-unlocked strong {
+  color: var(--brass-hi);
+}
+
+.achievement-row.is-locked {
+  opacity: 0.55;
+}
+
 .crew-hire {
   margin-bottom: 0.55rem;
 }

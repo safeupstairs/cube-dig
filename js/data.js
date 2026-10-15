@@ -571,6 +571,125 @@ export function digHeadingById(id) {
   return DIG_HEADINGS.find((h) => h.id === id) || DIG_HEADINGS[0];
 }
 
+/**
+ * Soft milestones — sticky across prestige, cleared on hard reset.
+ * Unlocks are toasted in the status bar and listed under Prestige.
+ */
+export const ACHIEVEMENTS = [
+  {
+    id: 'first_sale',
+    name: 'Open for business',
+    blurb: 'Sell something at the village market.',
+    group: 'economy',
+  },
+  {
+    id: 'first_ore_sold',
+    name: 'Ore to coin',
+    blurb: 'Sell coal, iron, gold, or crystal at the market.',
+    group: 'economy',
+  },
+  {
+    id: 'first_bar',
+    name: 'First pour',
+    blurb: 'Smelt an iron or gold bar.',
+    group: 'economy',
+  },
+  {
+    id: 'first_hire',
+    name: 'Hired help',
+    blurb: 'Hire your first digger.',
+    group: 'crew',
+  },
+  {
+    id: 'heading_widen',
+    name: 'Widen the cut',
+    blurb: 'Order a digger to head Widen.',
+    group: 'crew',
+  },
+  {
+    id: 'heading_core',
+    name: 'Point the crew',
+    blurb: 'Order a digger Toward core.',
+    group: 'crew',
+  },
+  {
+    id: 'first_pump',
+    name: 'Dry pocket',
+    blurb: 'Place a shaft pump.',
+    group: 'survival',
+  },
+  {
+    id: 'storm_ready',
+    name: 'Storm ready',
+    blurb: 'Be under rain with a pump already placed.',
+    group: 'survival',
+  },
+  {
+    id: 'echo_sense',
+    name: 'Listening in',
+    blurb: 'Place a Listening Post and tune Echo Sense.',
+    group: 'survey',
+  },
+  {
+    id: 'layer_soil',
+    name: 'Through the sod',
+    blurb: 'Break into the soft surface layer.',
+    group: 'depth',
+  },
+  {
+    id: 'layer_stone',
+    name: 'Into the crust',
+    blurb: 'Reach the stone band (~8% toward the core).',
+    group: 'depth',
+  },
+  {
+    id: 'layer_ore',
+    name: 'Vein country',
+    blurb: 'Reveal coal or iron in the fog.',
+    group: 'depth',
+  },
+  {
+    id: 'layer_dread',
+    name: 'Dread depth',
+    blurb: 'Dig past 38% — horrors can stalk the fog.',
+    group: 'depth',
+  },
+  {
+    id: 'layer_shell',
+    name: 'Cube contact',
+    blurb: 'Reveal cube shell in the fog.',
+    group: 'depth',
+  },
+  {
+    id: 'first_seal',
+    name: 'Seal cracked',
+    blurb: 'Break a seal for ◆.',
+    group: 'cube',
+  },
+  {
+    id: 'first_prestige',
+    name: 'Echo of a dig',
+    blurb: 'Prestige for the first time.',
+    group: 'cube',
+  },
+  {
+    id: 'prestige_chapel',
+    name: 'Blessed reset',
+    blurb: 'Prestige while a chapel stands in the shaft.',
+    group: 'cube',
+  },
+  {
+    id: 'core_opened',
+    name: 'The Center',
+    blurb: 'Crack the yellow core.',
+    group: 'cube',
+  },
+];
+
+export function achievementById(id) {
+  return ACHIEVEMENTS.find((a) => a.id === id) || null;
+}
+
 export const ENDING_TEXT = `Beneath the last seal there is no machine, no prize vault, no company memo.
 
 Only a small wooden cube — hand-carved, warm somehow — and a note burned into the grain:
