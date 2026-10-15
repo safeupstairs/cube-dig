@@ -88,6 +88,8 @@ body {
   font-family: var(--font);
   font-size: 18px;
   image-rendering: pixelated;
+  /* Chromium (Chrome/Brave) steals pinch/pan when the document can bounce-scroll */
+  overscroll-behavior: none;
 }
 
 .hidden {
@@ -410,6 +412,8 @@ body {
   overflow: hidden;
   background: #0e1418;
   box-shadow: inset 0 0 0 1px rgba(196, 163, 90, 0.12);
+  /* Keep Chromium from claiming pan/zoom on the empty wrap around the canvas */
+  touch-action: none;
 }
 
 #world {
@@ -420,6 +424,9 @@ body {
   cursor: crosshair;
   image-rendering: pixelated;
   touch-action: none;
+  -ms-touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Dig-mode tool cursors (SVG data URIs; hotspot near tip) */
@@ -1720,19 +1727,31 @@ body {
 }
 
 @media (max-width: 900px) {
+  /*
+   * Lock the shell — Chromium (Chrome/Brave, incl. iOS) cancels canvas pinch and
+   * breaks position:fixed rail taps when an ancestor is overflow:auto scrollable.
+   * Dock + bag-bar keep their own pan-y scrollers.
+   */
+  html,
+  body {
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
   /* Fixed rail height — keep dock/content clear of the overlay */
   #app {
     --menu-rail-h: 5.25rem;
     width: 100%;
+    height: 100%;
+    height: 100dvh;
     border-left: 0;
     border-right: 0;
     /* border-box: padding reserves space inside 100% height for the fixed rail */
     padding-bottom: calc(var(--menu-rail-h) + env(safe-area-inset-bottom, 0px));
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    /* Prefer dock/bag scrollers over chaining into the page */
-    overscroll-behavior-y: none;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .hud-top {

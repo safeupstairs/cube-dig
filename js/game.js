@@ -3606,7 +3606,22 @@ function bindMenuRail() {
   const rail = els.menuRail || document.getElementById('menu-rail');
   if (!rail) return;
   for (const btn of rail.querySelectorAll('[data-dock]')) {
-    btn.addEventListener('click', () => {
+    // pointerup: Chromium often swallows click after a tiny scroll/jitter on mobile
+    let handledByPointer = false;
+    btn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      handledByPointer = true;
+      unlockAudio();
+      const id = btn.getAttribute('data-dock');
+      if (!id) return;
+      selectDockPanel(id);
+    });
+    btn.addEventListener('click', (e) => {
+      if (handledByPointer) {
+        handledByPointer = false;
+        e.preventDefault();
+        return;
+      }
       unlockAudio();
       const id = btn.getAttribute('data-dock');
       if (!id) return;
@@ -3701,6 +3716,8 @@ function onPointerDown(e) {
     clearToolToDig();
     e.preventDefault();
   }
+  // Touch: block Chromium page-scroll / browser-zoom so pinch+pan stay on the canvas
+  if (e.pointerType === 'touch') e.preventDefault();
   canvasPress = true;
   canvasPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try {
@@ -3728,6 +3745,11 @@ function onPointerMove(e) {
   if (!canvasPress) {
     syncHoverFromClient(e.clientX, e.clientY);
     return;
+  }
+
+  // Keep Chromium from taking over mid-gesture (scroll / browser zoom)
+  if (e.pointerType === 'touch' && canvasPointers.has(e.pointerId)) {
+    e.preventDefault();
   }
 
   // Two-finger pinch: zoom toward midpoint (same limits as wheel)
@@ -4243,14 +4265,22 @@ function boot() {
     renderer.resize();
     refreshHoverAfterCamera();
   });
-  els.canvas.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointermove', onPointerMove);
+  // passive:false so touch preventDefault can stop Chromium scroll/zoom steal
+  els.canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerCancel);
   els.canvas.addEventListener('pointerleave', () => {
     if (!canvasPress) clearCanvasHover();
   });
   els.canvas.addEventListener('wheel', onWheel, { passive: false });
+  // Belt-and-suspenders: some Chromium builds cancel pointer* mid-pinch; keep
+  // native touch from scrolling/zooming the page while fingers are on the map.
+  const blockTouchScroll = (e) => {
+    if (e.touches && e.touches.length) e.preventDefault();
+  };
+  els.canvas.addEventListener('touchstart', blockTouchScroll, { passive: false });
+  els.canvas.addEventListener('touchmove', blockTouchScroll, { passive: false });
   // Tips stick if the dock scrolls under a still pointer (no leave event)
   document.addEventListener(
     'scroll',
