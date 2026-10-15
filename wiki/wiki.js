@@ -503,7 +503,7 @@ function pageItems() {
   return `
     ${crumbs(['#/items', 'Items'])}
     <h1>Items</h1>
-    <p class="wiki-lead">Bag resources — dig drops and craft outputs. Coins only come from selling.</p>
+    <p class="wiki-lead">Bag resources — dig drops and craft outputs. Coins only come from selling. ${itemLink('fragment')} is not the same as ${link('#/shards', '◆ shards')}.</p>
     ${cardGrid(Object.keys(RESOURCE_META).map(itemCard).join(''))}
   `;
 }
@@ -528,7 +528,19 @@ function pageItem(id) {
       </dl>
     </aside>
     <h1>${esc(m.name)}</h1>
-    <p class="wiki-lead">Bag stock used for buildings, upgrades, and market sales.</p>
+    <p class="wiki-lead">${
+      id === 'fragment'
+        ? 'Bag item from the cube shell (and seals). Sell for coins or spend on buildings — not the same as ◆ shards.'
+        : 'Bag stock used for buildings, upgrades, and market sales.'
+    }</p>
+    ${
+      id === 'fragment'
+        ? `<section class="wiki-section"><h2>Not shards</h2>
+          <p><strong>Fragments</strong> live in bags and reset on prestige. <strong>◆ Shards</strong> are a separate prestige currency (HUD) from seals, the core, and depth grants — spent on ${link('#/shards', 'permanent upgrades')}.</p>
+          <p>Shell drops fragments only. Seals drop both. Core drops ◆ only.</p>
+        </section>`
+        : ''
+    }
     <section class="wiki-section">
       <h2>Sources</h2>
       ${
@@ -689,7 +701,7 @@ function pageShards() {
   return `
     ${crumbs(['#/shards', 'Shard upgrades'])}
     <h1>Shard upgrades</h1>
-    <p class="wiki-lead">Permanent ◆ purchases. Survive prestige; wiped only by hard reset.</p>
+    <p class="wiki-lead">Permanent ◆ purchases. Survive prestige; wiped only by hard reset. ◆ is not ${itemLink('fragment')} — fragments are a sellable bag item.</p>
     <table class="wiki-table">
       <thead><tr><th>Upgrade</th><th>Effect</th><th>Cost</th></tr></thead>
       <tbody>${rows}</tbody>

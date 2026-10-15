@@ -1037,7 +1037,8 @@ export const WIKI_SECTIONS = [
     title: 'Resources',
     paragraphs: [
       'Bags hold everything you dig or craft. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
-      'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick). Cube shell drops fragments; seals and the core drop ◆.',
+      'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick).',
+      'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Listening Post / wards. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
     ],
