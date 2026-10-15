@@ -460,6 +460,15 @@ body {
   box-shadow: inset 1px 0 0 var(--brass-lo);
 }
 
+/* Collapsed dock — dig canvas uses the full stage width */
+.dock.is-closed {
+  display: none;
+}
+
+.stage:has(> .dock.is-closed) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .panel {
   position: relative;
   border: 2px solid #0a0c0e;
@@ -1754,6 +1763,12 @@ body {
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .stage:has(> .dock.is-closed) .canvas-wrap {
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
   }
 
   /* Always-visible Option A menu — fixed above the fold */
