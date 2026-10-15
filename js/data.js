@@ -190,6 +190,16 @@ export const BUILDINGS = {
       'Lantern that hurts deep horrors in range. Place near shell / fog where creatures stalk. Does not dig. Each extra ward costs more.',
     color: '#5a4860',
   },
+  listening: {
+    id: 'listening',
+    name: 'Listening post',
+    role: 'Survey',
+    cost: { coins: 55, wood: 8, stone: 10, fragment: 1 },
+    max: 1,
+    blurb:
+      'Tunes Echo Sense to the buried cube — a vague pulse and camp bearing (no fog clear). Sharpen with the permanent Echo Sense shard upgrade. Place in the shaft. Max 1.',
+    color: '#6a7a9a',
+  },
 };
 
 export const UPGRADES = [
@@ -293,7 +303,45 @@ export const SHARD_UPGRADES = [
     cost: 2,
     max: 5,
   },
+  {
+    id: 'perm_sense',
+    name: 'Echo Sense',
+    blurb:
+      'Sharpens Listening Post pulses toward the cube (still no fog clear). Needs a Listening Post each run.',
+    cost: 2,
+    max: 4,
+  },
 ];
+
+/** Max permanent Echo Sense levels (Listening Post alone = tier 1). */
+export const ECHO_SENSE_SHARD_MAX = 4;
+
+/**
+ * Active sense tier this run: 0 = none, 1 = Listening Post only, up to 5 with shards.
+ * @param {{ buildings?: {id:string}[], shardUpgrades?: Record<string, number> }} state
+ */
+export function echoSenseTier(state) {
+  const has = (state.buildings || []).some((b) => b.id === 'listening');
+  if (!has) return 0;
+  const shard = Math.min(
+    ECHO_SENSE_SHARD_MAX,
+    Math.max(0, state.shardUpgrades?.perm_sense || 0)
+  );
+  return 1 + shard;
+}
+
+/**
+ * Soft pulse ellipse radii (tiles) around the cube. Shrinks as tier rises.
+ * @param {number} tier
+ * @param {number} span surface→core tile span
+ */
+export function echoSensePulseRadii(tier, span) {
+  if (tier <= 0) return { rx: 0, ry: 0 };
+  const rx = Math.max(3, 26 - tier * 4.5);
+  const half = Math.max(0.04, 0.28 - tier * 0.05);
+  const ry = Math.max(rx * 0.65, Math.max(1, span) * half);
+  return { rx, ry };
+}
 
 /** Cheapest level-1 shard upgrade (Echo muscle). */
 export function cheapestShardCost() {
@@ -492,6 +540,31 @@ export const DIG_FILTERS = [
 
 export function digFilterById(id) {
   return DIG_FILTERS.find((f) => f.id === id) || DIG_FILTERS[0];
+}
+
+/** Dig heading — how diggers choose among reachable faces (Orders panel). */
+export const DIG_HEADINGS = [
+  {
+    id: 'down',
+    label: 'Down',
+    blurb: 'Prefer digging deeper — classic shaft drive.',
+  },
+  {
+    id: 'widen',
+    label: 'Widen',
+    blurb: 'Prefer sideways digs near your depth — open a wider shaft for prestige.',
+  },
+  {
+    id: 'toward_core',
+    label: 'Toward core',
+    blurb:
+      'Bias digs toward the buried cube among revealed tiles. Needs Echo Sense (Listening Post) or a fog-revealed shell.',
+    requireSense: true,
+  },
+];
+
+export function digHeadingById(id) {
+  return DIG_HEADINGS.find((h) => h.id === id) || DIG_HEADINGS[0];
 }
 
 export const ENDING_TEXT = `Beneath the last seal there is no machine, no prize vault, no company memo.

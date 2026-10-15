@@ -498,7 +498,11 @@ export function isExposed(world, x, y) {
 /**
  * @param {(x:number,y:number)=>boolean} [canEnter] optional walk filter (e.g. avoid flood)
  */
-export function findTarget(world, sx, sy, pred, maxDist = 64, canEnter = null) {
+/**
+ * @param {(id:string,x:number,y:number)=>boolean} pred
+ * @param {(nx:number,ny:number,standX:number,standY:number,dist:number)=>number} [scoreBias]
+ */
+export function findTarget(world, sx, sy, pred, maxDist = 64, canEnter = null, scoreBias = null) {
   // Snap start onto nearest walkable if needed
   let startX = sx;
   let startY = sy;
@@ -541,7 +545,8 @@ export function findTarget(world, sx, sy, pred, maxDist = 64, canEnter = null) {
       if (!isExposed(world, nx, ny)) continue;
       const dirBonus = ny > y ? 14 : ny === y ? 10 : 4;
       // Mild depth preference so bottom tip doesn't outrank nearby walls forever
-      const score = ny * 2 + dirBonus - dist * 5;
+      let score = ny * 2 + dirBonus - dist * 5;
+      if (scoreBias) score += scoreBias(nx, ny, x, y, dist);
       if (score > bestScore) {
         bestScore = score;
         best = { x: nx, y: ny, id: t.id, standX: x, standY: y };

@@ -415,6 +415,18 @@ export function createRenderer(canvas) {
       pxRect(px, py, 5 * s, 9 * s, 6 * s, 2 * s, chug > 0.5 ? '#6a9ec8' : '#4a7a98');
       pxRect(px, py, 2 * s, 12 * s, 3 * s, 2 * s, '#2a3a42');
       pxRect(px, py, 11 * s, 12 * s, 3 * s, 2 * s, '#2a3a42');
+    } else if (id === 'listening') {
+      // Listening post — dish + brass ear toward the deep
+      pxRect(px, py, 3 * s, 8 * s, 10 * s, 6 * s, '#4a5568');
+      pxRect(px, py, 4 * s, 9 * s, 8 * s, 4 * s, '#6a7a9a');
+      pxRect(px, py, 7 * s, 4 * s, 2 * s, 5 * s, '#3a4450');
+      pxRect(px, py, 5 * s, 3 * s, 6 * s, 2 * s, '#8a9ab0');
+      const ping = 0.45 + 0.55 * Math.sin(t * 2.4);
+      pxRect(px, py, 6 * s, 2 * s, 4 * s, 2 * s, ping > 0.55 ? '#c8d8f0' : '#9ab8e8');
+      pxRect(px, py, 6 * s, 10 * s, 4 * s, 2 * s, '#c4a35a');
+      if (ping > 0.7) {
+        pxRect(px, py, 4 * s, 1 * s, 8 * s, 1 * s, 'rgba(154,184,232,0.35)');
+      }
     } else {
       pxRect(px, py, 2 * s, 4 * s, 12 * s, 10 * s, b.def?.color || '#5a5a5a');
     }
@@ -520,6 +532,7 @@ export function createRenderer(canvas) {
    * @param {string|null} [opts.selectedWorkerId]
    * @param {Array<object>} [opts.buildingRadii]
    * @param {Array<object>} [opts.drillRadii] legacy alias
+   * @param {{tier:number,cx:number,cy:number,rx:number,ry:number}|null} [opts.echoSense]
    */
   function draw(state, hover, fx, opts = null) {
     const selectedWorkerId =
@@ -716,6 +729,45 @@ export function createRenderer(canvas) {
       const s = worldToScreen(e.x, e.y, shake);
       ctx.strokeStyle = 'rgba(196,163,90,0.55)';
       ctx.strokeRect(s.x + 2, s.y + 2, tw - 4, tw - 4);
+    }
+
+    // Echo Sense pulse — soft ellipse around the cube (no fog reveal)
+    const sense = opts && typeof opts === 'object' ? opts.echoSense : null;
+    if (sense && sense.rx > 0 && sense.ry > 0) {
+      const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 700);
+      const c = worldToScreen(sense.cx + 0.5, sense.cy + 0.5, shake);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.scale(sense.rx * tw, sense.ry * tw);
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(154, 184, 232, ${0.18 + pulse * 0.22})`;
+      ctx.lineWidth = Math.max(1.2 / Math.max(sense.rx, sense.ry), 0.04);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(154, 184, 232, ${0.03 + pulse * 0.04})`;
+      ctx.fill();
+      ctx.restore();
+
+      // Edge compass when the pulse center is off-screen
+      const margin = 18;
+      const onX = c.x >= -40 && c.x <= w + 40;
+      const onY = c.y >= -40 && c.y <= h + 40;
+      if (!onX || !onY) {
+        const ax = Math.max(margin, Math.min(w - margin, c.x));
+        const ay = Math.max(margin, Math.min(h - margin, c.y));
+        const ang = Math.atan2(c.y - ay, c.x - ax);
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(ang);
+        ctx.fillStyle = `rgba(154, 184, 232, ${0.55 + pulse * 0.35})`;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-6, 6);
+        ctx.lineTo(-6, -6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     for (const tomb of state.tombstones || []) {

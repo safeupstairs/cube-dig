@@ -375,6 +375,7 @@ body {
 }
 
 .depth-bar {
+  position: relative;
   flex: 1;
   height: 10px;
   background: #12161a;
@@ -389,6 +390,18 @@ body {
   background: linear-gradient(90deg, #4a8a4a, var(--brass), #c45c4a);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
   image-rendering: pixelated;
+}
+
+/* Echo Sense online marker (Listening Post) — sits at the core end of the bar */
+.depth-bar .depth-sense {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  margin-left: -1px;
+  background: #9ab8e8;
+  box-shadow: 0 0 6px rgba(154, 184, 232, 0.85);
+  pointer-events: none;
 }
 
 .stage {
@@ -1489,6 +1502,12 @@ body {
     0 0 0 1px var(--brass-hi),
     inset -1px -1px 0 #1a2a1a,
     inset 1px 1px 0 #6a8a5a;
+}
+
+.filter-btn.is-locked:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--muted);
 }
 
 .orders-clear {

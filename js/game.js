@@ -3,6 +3,7 @@ import {
   CHAPEL_HEAL_PER_SEC,
   CHAPEL_RADIUS,
   DIG_FILTERS,
+  DIG_HEADINGS,
   SEEN_DIG_TYPES,
   ENDING_TEXT,
   MAP_H,
@@ -18,6 +19,9 @@ import {
   WARD_RADIUS,
   WEATHER,
   digFilterById,
+  digHeadingById,
+  echoSensePulseRadii,
+  echoSenseTier,
   PRESTIGE_DEPTH_RATIO,
   PRESTIGE_MIN_COLUMNS,
   prestigeDepthShards,
@@ -89,6 +93,7 @@ const els = {
   prestige: document.getElementById('stat-prestige'),
   depth: document.getElementById('stat-depth'),
   depthFill: document.getElementById('depth-fill'),
+  depthSense: document.getElementById('depth-sense'),
   bags: document.getElementById('bags'),
   market: document.getElementById('market'),
   marketHint: document.getElementById('market-hint'),
@@ -776,6 +781,54 @@ function refreshSeenTypes() {
   return SEEN_DIG_TYPES.some((id, i) => seen[id] !== before[i]);
 }
 
+/** Camp-relative bearing for Echo Sense (Listening Post). */
+function echoSenseCardinal() {
+  const w = state.world;
+  const cx = w.cubeCx ?? w.centerX;
+  const sx = w.spawnX ?? Math.floor((w.w - 1) / 2);
+  const dx = cx - sx;
+  if (Math.abs(dx) < 10) return 'near camp (underfoot)';
+  return dx > 0 ? 'east of camp' : 'west of camp';
+}
+
+/** Toward-core Orders unlock: Listening Post sense or fog-revealed shell. */
+function towardCoreHeadingUnlocked() {
+  if (echoSenseTier(state) >= 1) return true;
+  return !!(state.seenTypes && state.seenTypes.shell);
+}
+
+function ensureWorkerDigHeading(w) {
+  const h = digHeadingById(w.digHeading || 'down');
+  if (h.requireSense && !towardCoreHeadingUnlocked()) {
+    w.digHeading = 'down';
+    return digHeadingById('down');
+  }
+  w.digHeading = h.id;
+  return h;
+}
+
+/** Score bias for findTarget based on digger heading. */
+function headingScoreBias(headingId, workerSy) {
+  const cubeX = state.world.cubeCx ?? state.world.centerX;
+  const cubeY = state.world.cubeCy ?? state.world.centerY;
+  if (headingId === 'widen') {
+    return (nx, ny, x) => {
+      const lateral = nx !== x ? 18 : 0;
+      const stayLevel = Math.max(0, 16 - Math.abs(ny - workerSy) * 5);
+      const deepenPen = Math.max(0, ny - workerSy) * -4;
+      return lateral + stayLevel + deepenPen;
+    };
+  }
+  if (headingId === 'toward_core') {
+    return (nx, ny, x, y) => {
+      const before = Math.abs(x - cubeX) + Math.abs(y - cubeY);
+      const after = Math.abs(nx - cubeX) + Math.abs(ny - cubeY);
+      return (before - after) * 24 + Math.max(0, 36 - after * 0.3);
+    };
+  }
+  return (_nx, ny) => ny * 4;
+}
+
 function digFilterUnlocked(f, seen) {
   if (f.requireSeenAny) return f.requireSeenAny.some((id) => !!seen[id]);
   if (f.requireSeen) return !!seen[f.requireSeen];
@@ -820,6 +873,7 @@ function serialize() {
       vitality: w.vitality,
       resting: !!w.resting,
       digFilter: w.digFilter || 'auto',
+      digHeading: w.digHeading || 'down',
       shackUid: w.shackUid || null,
       job: w.job,
     })),
@@ -916,6 +970,7 @@ function hydrate(data) {
         typeof w.vitality === 'number' && !Number.isNaN(w.vitality) ? w.vitality : maxV,
       resting: !!w.resting,
       digFilter: w.digFilter || 'auto',
+      digHeading: w.digHeading || 'down',
       shackUid: w.shackUid || null,
       job: w.job || null,
       jobBlocked: false,
@@ -1221,6 +1276,7 @@ function placeWorker(tx, ty) {
     vitality: workerMaxVitality(state),
     resting: false,
     digFilter: 'auto',
+    digHeading: 'down',
     shackUid: null,
     job: null,
     jobBlocked: false,
@@ -1432,6 +1488,15 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
   selectedWorkerId = null;
   flashBuildingRadius(uid, 2.8);
   // Sticky place while selected; starter-only caps still clear the tool
+  if (id === 'listening') {
+    tool = buildingAtCap(id) ? null : tool;
+    const tier = echoSenseTier(state);
+    setStatus(
+      `Listening Post online — Echo Sense ${tier}: cube lies ${echoSenseCardinal()}. No fog cleared.`
+    );
+    renderUi();
+    return;
+  }
   if (buildingAtCap(id)) {
     tool = null;
     setStatus(`Built ${def.name} — at max. Dig / chop selected.`);
@@ -1502,6 +1567,12 @@ function markersForBuilding(b, alpha) {
 
 /** @returns {string|null} gameplay range label, or null when the building has no range */
 function describeBuildingRange(b) {
+  if (b.id === 'listening') {
+    const tier = echoSenseTier(state);
+    return tier
+      ? `Echo Sense ${tier} · ${echoSenseCardinal()}`
+      : 'Echo Sense offline';
+  }
   const cfg = BUILDING_OVERLAY[b.id];
   if (!cfg) return null;
   if (b.id === 'mine') return `bore r${cfg.radius}`;
@@ -2347,6 +2418,9 @@ function pickJob(w) {
   const sx = Math.floor(w.x);
   const sy = Math.floor(w.y);
   const filter = digFilterById(w.digFilter || 'auto');
+  ensureWorkerDigHeading(w);
+  const heading = w.digHeading || 'down';
+  const bias = headingScoreBias(heading, sy);
   const canMine = (id) => {
     if (!TILES[id]?.diggable) return false;
     if (id === 'core') return state.prestige >= 5;
@@ -2359,7 +2433,7 @@ function pickJob(w) {
     return true;
   };
   // Only path / stand on dry shaft (pump pockets OK); wet diggers flee instead
-  const direct = findTarget(state.world, sx, sy, pred, 72, shaftTileIsDry);
+  const direct = findTarget(state.world, sx, sy, pred, 72, shaftTileIsDry, bias);
   if (direct) return direct;
 
   // Filtered resource visible but walled off — tunnel through revealed diggable
@@ -2584,6 +2658,23 @@ function renderUi() {
   const depth = deepestClearedTowardCore(state.world);
   els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
   els.depth.textContent = `${Math.floor(depth * 100)}%`;
+  const senseTier = echoSenseTier(state);
+  const depthMeter = els.depth?.closest?.('.meter.depth');
+  if (depthMeter) {
+    depthMeter.title =
+      senseTier > 0
+        ? `Depth toward core · Echo Sense ${senseTier}: ${echoSenseCardinal()}`
+        : 'Distance to core';
+  }
+  if (els.depthSense) {
+    if (senseTier > 0) {
+      els.depthSense.classList.remove('hidden');
+      els.depthSense.style.left = '100%';
+      els.depthSense.title = `Echo Sense ${senseTier}: ${echoSenseCardinal()}`;
+    } else {
+      els.depthSense.classList.add('hidden');
+    }
+  }
 
   els.bags.innerHTML = '';
   for (const [k, meta] of Object.entries(RESOURCE_META)) {
@@ -3201,12 +3292,13 @@ function renderOrdersPanel() {
   els.orders.classList.remove('hidden');
   const unlocked = digFiltersForOrders();
   ensureWorkerDigFilter(w);
+  const heading = ensureWorkerDigHeading(w);
   const filter = digFilterById(w.digFilter || 'auto');
   const shack = w.shackUid
     ? state.buildings.find((b) => b.uid === w.shackUid)
     : null;
   els.ordersHint.textContent =
-    `Selected digger · digs ${filter.label}` +
+    `Selected digger · digs ${filter.label} · heads ${heading.label}` +
     (w.jobBlocked && !w.resting ? ' · stuck (no reachable dig)' : '') +
     (shack ? ` · rests at shack (${shack.x},${shack.y})` : ' · rests at nearest shack / spawn');
 
@@ -3238,6 +3330,45 @@ function renderOrdersPanel() {
   }
   digRow.append(digLabel, digGrid);
   els.orders.appendChild(digRow);
+
+  const headRow = document.createElement('div');
+  headRow.className = 'orders-row';
+  const headLabel = document.createElement('span');
+  headLabel.textContent = 'Heading';
+  const headGrid = document.createElement('div');
+  headGrid.className = 'filter-grid';
+  const coreUnlocked = towardCoreHeadingUnlocked();
+  for (const h of DIG_HEADINGS) {
+    const locked = !!(h.requireSense && !coreUnlocked);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className =
+      'filter-btn' +
+      ((w.digHeading || 'down') === h.id ? ' is-active' : '') +
+      (locked ? ' is-locked' : '');
+    btn.disabled = locked;
+    btn.textContent = h.label;
+    bindTip(
+      btn,
+      h.label,
+      locked
+        ? `${h.blurb}\nLocked — build a Listening Post (or reveal cube shell fog).`
+        : h.blurb
+    );
+    btn.addEventListener('click', () => {
+      if (locked) return;
+      w.digHeading = h.id;
+      w.job = null;
+      w.jobBlocked = false;
+      setStatus(`Orders: head ${h.label}.`);
+      sfx.buy();
+      renderUi();
+      save();
+    });
+    headGrid.appendChild(btn);
+  }
+  headRow.append(headLabel, headGrid);
+  els.orders.appendChild(headRow);
 
   const shackRow = document.createElement('div');
   shackRow.className = 'orders-row';
@@ -3531,13 +3662,23 @@ function bindHelpTips() {
     );
   }
   if (orders) {
-    bindTip(
-      orders,
-      'Orders',
-      'Dig target: what this digger seeks. Home shack: where they rest when tired.\n' +
-        'Cube shell / seal / core filters appear only after fog reveals that layer.\n' +
-        'While a digger is selected, click a shack on the map to assign it as home.'
-    );
+    bindTip(orders, 'Orders', () => {
+      const tier = echoSenseTier(state);
+      const senseLine =
+        tier > 0
+          ? `Echo Sense ${tier}: cube lies ${echoSenseCardinal()} (Listening Post pulse — no fog clear).`
+          : 'Build a Listening Post for Echo Sense (vague cube bearing + pulse). Sharpen with the Echo Sense shard upgrade.';
+      return [
+        {
+          text: 'Dig target: what they seek. Heading: Down / Widen / Toward core. Home shack: where they rest.',
+        },
+        { text: senseLine },
+        {
+          text: 'Toward core unlocks with Echo Sense or after fog reveals cube shell. Filters for shell / seal / core appear only after fog reveals that layer.',
+          muted: true,
+        },
+      ];
+    });
   }
   if (prestige) {
     bindTip(prestige, 'Prestige', () => {
@@ -4025,9 +4166,24 @@ function loop(ts) {
     updateInspect();
   }
 
+  const senseTier = echoSenseTier(state);
+  let echoSense = null;
+  if (senseTier > 0) {
+    const coreY = state.world.cubeCy ?? state.world.centerY;
+    const span = Math.max(1, coreY - state.world.surfaceY);
+    const { rx, ry } = echoSensePulseRadii(senseTier, span);
+    echoSense = {
+      tier: senseTier,
+      cx: state.world.cubeCx ?? state.world.centerX,
+      cy: coreY,
+      rx,
+      ry,
+    };
+  }
   renderer.draw(state, hover, fx, {
     selectedWorkerId,
     buildingRadii: buildingRadiusMarkers(),
+    echoSense,
   });
   requestAnimationFrame(loop);
 }
