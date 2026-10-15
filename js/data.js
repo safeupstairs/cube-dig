@@ -319,7 +319,7 @@ export const BUILDINGS = {
     role: 'Refining',
     cost: { coins: 100, stone: 12, coal: 8 },
     blurb:
-      'Must sit on top of the world. Select to lock recipe (Auto / Iron / Copper / Gold). Slow craft — unlock Hotter furnace to speed up. Progress shows above the building while working.',
+      'Must sit on top of the world. Select to lock recipe (Auto / Iron / Copper / Gold) or Off to save coal. Slow craft — Hotter furnace speeds it up. Progress shows above while working.',
     color: '#8a4030',
   },
   refinery: {
@@ -328,7 +328,7 @@ export const BUILDINGS = {
     role: 'Advanced refining',
     cost: { coins: 160, stone: 16, ironBar: 2, coal: 6 },
     blurb:
-      'Must sit on top of the world. Select to lock recipe (Auto / steel / wire / lens). Slow craft — Hotter furnace speeds refineries too. Progress shows above while working.',
+      'Must sit on top of the world. Select to lock recipe (Auto / steel / wire / lens) or Off to save coal. Hotter furnace speeds it too. Progress shows above while working.',
     color: '#5a6878',
   },
   grove: {
@@ -411,7 +411,7 @@ export const BUILDINGS = {
     cost: { coins: 55, wood: 8, stone: 10, fragment: 1 },
     max: 1,
     blurb:
-      'Tunes Echo Sense to the buried cube — a vague pulse and camp bearing (no fog clear). Sharpen with the permanent Echo Sense shard upgrade. Place in the shaft. Max 1.',
+      'Tunes Echo Sense to the buried cube — a wide vague pulse and rough camp bearing (no fog clear). Echo Sense shards and Focus optics tighten the search. Place in the shaft. Max 1.',
     color: '#6a7a9a',
   },
 };
@@ -588,6 +588,7 @@ export function echoSenseTier(state) {
 
 /**
  * Soft pulse ellipse radii (tiles) around the cube. Shrinks as tier rises.
+ * Tier 1 (Listening Post alone) is intentionally vague / wide; shards + optics tighten.
  * @param {number} tier
  * @param {number} span surface→core tile span
  * @param {number} [optics=0] Focus optics upgrade levels
@@ -595,9 +596,10 @@ export function echoSenseTier(state) {
 export function echoSensePulseRadii(tier, span, optics = 0) {
   if (tier <= 0) return { rx: 0, ry: 0 };
   const o = Math.max(0, optics | 0);
-  const rx = Math.max(3, 26 - tier * 4.5 - o * 1.6);
-  const half = Math.max(0.04, 0.28 - tier * 0.05 - o * 0.02);
-  const ry = Math.max(rx * 0.65, Math.max(1, span) * half);
+  // Was ~21.5× at T1 — too tight for a first post. Start wide, then focus.
+  const rx = Math.max(4, 42 - tier * 7 - o * 2);
+  const half = Math.max(0.05, 0.42 - tier * 0.07 - o * 0.025);
+  const ry = Math.max(rx * 0.7, Math.max(1, span) * half);
   return { rx, ry };
 }
 
@@ -1106,7 +1108,7 @@ export const WIKI_SECTIONS = [
     id: 'smelting',
     title: 'Smelter',
     paragraphs: [
-      'Surface only (sky pad above the dirt). Click a placed smelter to lock its recipe: Auto, Iron, Copper, or Gold. Specialize multiple smelters.',
+      'Surface only (sky pad above the dirt). Click a placed smelter to lock its recipe: Auto, Iron, Copper, Gold, or Off (saves coal). Specialize multiple smelters.',
       'Crafts are slow by default (~7s per bar). A progress bar appears above the building while it works. Hotter furnace speeds every smelter and refinery.',
       ...SMELT_RECIPES.map((r) => formatRecipeLine(r)),
       'Iron bars unlock the Iron-bound pick upgrade.',
@@ -1116,7 +1118,7 @@ export const WIKI_SECTIONS = [
     id: 'refining',
     title: 'Refinery',
     paragraphs: [
-      'Surface advanced plant. Costs iron bars to build. Click to lock recipe: Auto, Steel, Copper wire, or Crystal lens.',
+      'Surface advanced plant. Costs iron bars to build. Click to lock recipe: Auto, Steel, Copper wire, Crystal lens, or Off (saves coal).',
       'Even slower than smelting (~10s). Same Hotter furnace upgrade. Progress bar shows while refining.',
       ...REFINE_RECIPES.map((r) => formatRecipeLine(r)),
       'Steel → Steel tools. Copper wire → Pump coils / Drill coils. Crystal lenses → Focus optics / Bright wards (and sell well).',

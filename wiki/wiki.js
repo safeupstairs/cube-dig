@@ -617,7 +617,7 @@ function pageBuilding(id) {
     ${
       recipes
         ? `<section class="wiki-section"><h2>Recipes</h2>
-          <p>Click a placed ${esc(b.name.toLowerCase())} to lock Auto or a single recipe.</p>
+          <p>Click a placed ${esc(b.name.toLowerCase())} to lock Auto, a single recipe, or Off (saves coal).</p>
           <table class="wiki-table"><thead><tr><th>Recipe</th><th>Line</th></tr></thead>
           <tbody>${recipes
             .map(
@@ -802,7 +802,7 @@ function mechanicBody(id) {
         <p>See also ${link('#/mechanic/weather', 'Weather & floods')}.</p>`;
     case 'smelting':
       return `
-        <p>${buildingLink('smelter')} and ${buildingLink('refinery')} sit on the sky pad. Select a building to lock its recipe. Crafts are slow; a progress bar appears above while working.</p>
+        <p>${buildingLink('smelter')} and ${buildingLink('refinery')} sit on the sky pad. Select a building to lock its recipe, or <strong>Off</strong> to pause and save coal / inputs. Crafts are slow; a progress bar appears above while working.</p>
         <p>${link('#/upgrade/smelt_rate', 'Hotter furnace')} speeds both plants (+30% craft speed per level, max 6).</p>
         <h3>Smelter (~7s base)</h3>
         <ul>${SMELT_RECIPES.map((r) => `<li>${esc(formatRecipeLine(r))}</li>`).join('')}</ul>

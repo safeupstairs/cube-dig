@@ -643,9 +643,11 @@ function updateInspect() {
           ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
           : '';
       status =
-        bld.smeltIdle === false
-          ? `Smelting ${RESOURCE_META[bld.smeltProduct]?.name || 'bars'}${pct} (${mode})`
-          : `Idle — ${mode} · need ore + coal`;
+        mode === 'Off'
+          ? 'Off — not using coal'
+          : bld.smeltIdle === false
+            ? `Smelting ${RESOURCE_META[bld.smeltProduct]?.name || 'bars'}${pct} (${mode})`
+            : `Idle — ${mode} · need ore + coal`;
     } else if (bld.id === 'refinery') {
       const mode = recipeModeLabel(bld, REFINE_RECIPES);
       const pct =
@@ -653,9 +655,11 @@ function updateInspect() {
           ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
           : '';
       status =
-        bld.smeltIdle === false
-          ? `Refining ${RESOURCE_META[bld.smeltProduct]?.name || 'goods'}${pct} (${mode})`
-          : `Idle — ${mode} · need inputs`;
+        mode === 'Off'
+          ? 'Off — not using coal'
+          : bld.smeltIdle === false
+            ? `Refining ${RESOURCE_META[bld.smeltProduct]?.name || 'goods'}${pct} (${mode})`
+            : `Idle — ${mode} · need inputs`;
     } else if (bld.id === 'market') status = 'Open for trade';
     else if (bld.id === 'cottage') status = 'Rest';
     else if (bld.id === 'stall') status = 'Village';
@@ -997,13 +1001,18 @@ function refreshSeenTypes() {
   return SEEN_DIG_TYPES.some((id, i) => seen[id] !== before[i]);
 }
 
-/** Camp-relative bearing for Echo Sense (Listening Post). */
+/** Camp-relative bearing for Echo Sense (Listening Post). Coarser at low tier. */
 function echoSenseCardinal() {
+  const tier = echoSenseTier(state);
   const w = state.world;
   const cx = w.cubeCx ?? w.centerX;
   const sx = w.spawnX ?? Math.floor((w.w - 1) / 2);
   const dx = cx - sx;
-  if (Math.abs(dx) < 10) return 'near camp (underfoot)';
+  const nearBand = tier <= 1 ? 28 : tier <= 2 ? 16 : 10;
+  if (Math.abs(dx) < nearBand) {
+    return tier <= 1 ? 'near camp (roughly)' : 'near camp (underfoot)';
+  }
+  if (tier <= 1) return dx > 0 ? 'somewhere east' : 'somewhere west';
   return dx > 0 ? 'east of camp' : 'west of camp';
 }
 
@@ -3035,6 +3044,7 @@ function tryCraftRecipe(recipe) {
 /** Recipes available for this smelter/refinery given recipeMode. */
 function recipesForBuilding(b, recipes) {
   const mode = b.recipeMode || 'auto';
+  if (mode === 'off') return [];
   if (mode === 'auto') return recipes;
   const one = recipes.find((r) => r.id === mode);
   return one ? [one] : recipes;
@@ -3045,6 +3055,13 @@ function recipesForBuilding(b, recipes) {
  * @param {number} dt already scaled by smeltRate
  */
 function tickSurfaceRefiner(b, recipes, interval, dt) {
+  if ((b.recipeMode || 'auto') === 'off') {
+    b.t = 0;
+    b.smeltIdle = true;
+    b.smeltProduct = null;
+    b.smeltProgress = 0;
+    return;
+  }
   const list = recipesForBuilding(b, recipes);
   const next = list.find(recipeAffordable) || null;
   if (!next) {
@@ -4425,6 +4442,7 @@ function renderOrdersPanel() {
 
 function recipeModeLabel(b, recipes) {
   const mode = b.recipeMode || 'auto';
+  if (mode === 'off') return 'Off';
   if (mode === 'auto') return 'Auto';
   return recipes.find((r) => r.id === mode)?.label || 'Auto';
 }
@@ -4461,7 +4479,8 @@ function renderBuildingOrdersPanel() {
 
   const hint = document.createElement('p');
   hint.className = 'muted';
-  hint.textContent = 'Lock what this plant crafts. Other buildings stay in the Buildings list.';
+  hint.textContent =
+    'Lock what this plant crafts, or Off to save coal / inputs. Other buildings stay in the Buildings list.';
   el.appendChild(hint);
 
   const row = document.createElement('div');
@@ -4470,17 +4489,33 @@ function renderBuildingOrdersPanel() {
   label.textContent = 'Recipe';
   const grid = document.createElement('div');
   grid.className = 'filter-grid';
-  const modes = [{ id: 'auto', label: 'Auto', blurb: 'First craft that has inputs.' }, ...recipes];
+  const modes = [
+    { id: 'auto', label: 'Auto', blurb: 'First craft that has inputs.' },
+    ...recipes,
+    {
+      id: 'off',
+      label: 'Off',
+      blurb: 'Paused — no crafting, no coal or input use until you turn it back on.',
+    },
+  ];
   const def = b.def || buildingDef(b.id);
   for (const m of modes) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className =
-      'filter-btn' + ((b.recipeMode || 'auto') === m.id ? ' is-active' : '');
+      'filter-btn' +
+      ((b.recipeMode || 'auto') === m.id ? ' is-active' : '') +
+      (m.id === 'off' ? ' is-off' : '');
     btn.textContent = m.label;
     bindTip(btn, m.label, m.blurb || formatRecipeLine(m));
     btn.addEventListener('click', () => {
       b.recipeMode = m.id;
+      b.t = 0;
+      b.smeltProgress = 0;
+      if (m.id === 'off') {
+        b.smeltIdle = true;
+        b.smeltProduct = null;
+      }
       setStatus(`${def?.name || b.id}: ${m.label}.`);
       sfx.buy();
       renderUi();
