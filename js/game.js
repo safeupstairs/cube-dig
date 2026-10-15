@@ -3,6 +3,7 @@ import {
   CHAPEL_HEAL_PER_SEC,
   CHAPEL_RADIUS,
   ACHIEVEMENTS,
+  BIOME,
   DIG_FILTERS,
   DIG_HEADINGS,
   SEEN_DIG_TYPES,
@@ -457,6 +458,13 @@ function digTipStatusLines(tileId, x, y) {
     return lines;
   }
   lines.push({ text: 'Ready to dig' });
+  if (tileId === 'aquifer') {
+    lines.push({ text: 'Aquifer — breaching floods the shaft', warn: true });
+  } else if (tileId === 'lava') {
+    lines.push({ text: 'Lava — burns diggers standing next to it', warn: true });
+  } else if (tileId === 'gas') {
+    lines.push({ text: 'Gas pocket — explodes when breached', warn: true });
+  }
   return lines;
 }
 
@@ -691,6 +699,8 @@ function checkDepthAchievements() {
   const seen = state.seenTypes || {};
   if (seen.coal || seen.iron || seen.gold || seen.crystal) unlockAchievement('layer_ore');
   if (seen.shell || seen.seal || seen.core) unlockAchievement('layer_shell');
+  // Lava milestone can fire on fog reveal; aquifer/gas wait for a real breach
+  if (seen.lava) unlockAchievement('biome_lava');
 }
 
 /** Surface pad open and free of buildings (sky row above surfaceY). */
@@ -1228,6 +1238,19 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   else sfx.break();
   if (gained.coins) sfx.coin();
 
+  // Biome breaches — flood / burn / detonate after the tile is cleared
+  let hazardNote = '';
+  if (was === 'aquifer') {
+    hazardNote = onAquiferBreach(tx, ty);
+    unlockAchievement('biome_aquifer');
+  } else if (was === 'lava') {
+    hazardNote = onLavaBreach(tx, ty);
+    unlockAchievement('biome_lava');
+  } else if (was === 'gas') {
+    hazardNote = onGasBreach(tx, ty);
+    unlockAchievement('biome_gas');
+  }
+
   const blast = state.upgrades.blast || 0;
   if (blast > 0 && Math.random() < 0.12 * blast) {
     const nbs = [
@@ -1245,6 +1268,9 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
         setEmpty(state.world, nx, ny);
         applyTileDrops(state, wid);
         fx.burst(nx, ny, TILES[wid].color, 8);
+        if (wid === 'aquifer') onAquiferBreach(nx, ny);
+        else if (wid === 'lava') onLavaBreach(nx, ny);
+        else if (wid === 'gas') onGasBreach(nx, ny);
       }
     }
   }
@@ -1253,14 +1279,92 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   if (was === 'core') onCoreBroken();
   else if (fromPlayer) {
     setStatus(
-      `Broke ${TILES[was].name}` +
-        (gained.coins ? ` · +${gained.coins}c` : '') +
-        (gained.shards ? ` · +${gained.shards}◆` : '')
+      (hazardNote ||
+        `Broke ${TILES[was].name}` +
+          (gained.coins ? ` · +${gained.coins}c` : '') +
+          (gained.shards ? ` · +${gained.shards}◆` : ''))
     );
+  } else if (hazardNote) {
+    setStatus(hazardNote);
   }
   refreshSeenTypes();
   checkDepthAchievements();
   return true;
+}
+
+/** Aquifer breach — dump water into the shaft (pumps still help). */
+function onAquiferBreach(tx, ty) {
+  const cols = ensureFloodCols();
+  cols[tx] = Math.min(WEATHER.FLOOD_MAX, (cols[tx] || 0) + BIOME.AQUIFER_FLOOD);
+  // Equalize into connected basins immediately
+  stepFloodBasins(0.016, false);
+  fx.burst(tx, ty, '#4a8ab0', 18);
+  fx.floatText(tx, ty - 0.3, 'flood!', '#7ab0d0');
+  sfx.thunder(0.25);
+  return `Aquifer breached at (${tx},${ty}) — water floods the shaft!`;
+}
+
+/** Lava breach — scorch nearby diggers; standing beside lava keeps burning. */
+function onLavaBreach(tx, ty) {
+  fx.burst(tx, ty, '#e8a030', 20);
+  fx.floatText(tx, ty - 0.3, 'heat!', '#e8a030');
+  hurtWorkersNear(tx, ty, 2, BIOME.LAVA_BREACH_DAMAGE, 'A digger was scorched by lava.');
+  return `Lava opened at (${tx},${ty}) — keep diggers clear of the glow.`;
+}
+
+/** Gas pocket — blast radius damages diggers and cracks neighboring rock. */
+function onGasBreach(tx, ty) {
+  fx.burst(tx, ty, '#b8c868', 28);
+  fx.punch(0.65);
+  fx.floatText(tx, ty - 0.35, 'boom!', '#c8d878');
+  sfx.thunder(0.55);
+  hurtWorkersNear(tx, ty, BIOME.GAS_RADIUS, BIOME.GAS_DAMAGE, 'A digger caught a gas blast.');
+  const r = BIOME.GAS_RADIUS;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (Math.abs(dx) + Math.abs(dy) > r) continue;
+      const nt = tileAt(state.world, tx + dx, ty + dy);
+      if (!nt || !TILES[nt.id]?.diggable) continue;
+      if (nt.id === 'core' || nt.id === 'seal') continue;
+      state.world.hp[nt.i] = Math.max(0.5, state.world.hp[nt.i] - BIOME.GAS_CRACK);
+      if (!isRevealed(state.world, nt.x, nt.y)) {
+        state.world.revealed[nt.i] = 1;
+      }
+    }
+  }
+  revealAround(state.world, tx, ty, 2);
+  return `Gas pocket detonated at (${tx},${ty})!`;
+}
+
+function hurtWorkersNear(tx, ty, radius, damage, deathReason) {
+  for (const w of [...state.workers]) {
+    if (!state.workers.includes(w)) continue;
+    const d = Math.abs(Math.floor(w.x) - tx) + Math.abs(Math.floor(w.y) - ty);
+    if (d > radius) continue;
+    w.vitality = (w.vitality ?? workerMaxVitality(state)) - damage;
+    fx.floatText(w.x, w.y - 0.2, `-${Math.ceil(damage)}`, '#c45c4a');
+    if (w.vitality <= 0) killWorker(w, deathReason);
+  }
+}
+
+/** True if any revealed lava tile is orthogonally adjacent. */
+function workerBesideLava(wx, wy) {
+  const x = Math.floor(wx);
+  const y = Math.floor(wy);
+  for (const [dx, dy] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (!isRevealed(state.world, nx, ny)) continue;
+    const t = tileAt(state.world, nx, ny);
+    if (t?.id === 'lava') return true;
+  }
+  return false;
 }
 
 function onCoreBroken() {
@@ -2232,6 +2336,19 @@ function stepWorkers(dt) {
       const flee = fleeTargetFor(w);
       moveWorkerAlongShaft(w, flee.x, flee.y, speed, dt);
       continue;
+    }
+
+    // Standing beside revealed lava slowly cooks diggers — flee unless resting at chapel
+    if (workerBesideLava(w.x, w.y)) {
+      w.vitality -= BIOME.LAVA_BURN_PER_SEC * dt;
+      if (w.vitality <= 0) {
+        killWorker(w, 'A digger burned beside open lava.');
+        continue;
+      }
+      // Nudge away: clear job so they seek safer faces (or rest if spent)
+      if (!w.resting) {
+        w.job = null;
+      }
     }
 
     // Enter rest only when fully spent; stay resting until fully recharged

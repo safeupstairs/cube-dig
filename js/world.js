@@ -21,6 +21,10 @@ const IDS = [
   'seal',
   'core',
   'tree',
+  // Biomes — append only (save tile indices stay stable)
+  'aquifer',
+  'lava',
+  'gas',
 ];
 
 /**
@@ -250,6 +254,48 @@ export function generateWorld(prestige = 0, seed = 42) {
     sizeMin: 5,
     sizeMax: 12,
   });
+
+  // Biome pockets (replace stone only — same painter as ore veins)
+  scatterVeins({
+    id: 'aquifer',
+    attempts: 55,
+    minD: 10,
+    maxD: 48,
+    soft: 8,
+    sizeMin: 5,
+    sizeMax: 12,
+  });
+  scatterVeins({
+    id: 'gas',
+    attempts: 48,
+    minD: 28,
+    maxD: 78,
+    soft: 12,
+    sizeMin: 3,
+    sizeMax: 7,
+  });
+  scatterVeins({
+    id: 'lava',
+    attempts: 40,
+    minD: 72,
+    maxD: 140,
+    soft: 14,
+    sizeMin: 4,
+    sizeMax: 9,
+  });
+  // Extra lava near the cube approach (outside shell)
+  {
+    const lavaId = idIndex.lava;
+    for (let n = 0; n < 14; n++) {
+      const ang = rng() * Math.PI * 2;
+      const dist = shellR + 4 + Math.floor(rng() * 18);
+      const x = Math.round(cubeCx + Math.cos(ang) * dist);
+      const y = Math.round(cubeCy + Math.sin(ang) * dist * 0.9);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      if (tiles[y * w + x] !== stoneId) continue;
+      paintVein(lavaId, x, y, 4 + Math.floor(rng() * 5));
+    }
+  }
 
   // Extra crystal veins near the cube approach (outside shell)
   {

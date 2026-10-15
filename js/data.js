@@ -61,6 +61,56 @@ export const TILES = {
     shards: 4,
   },
   tree: { name: 'Tree', color: '#2f5a32', edge: '#1e3a22', hi: '#5a9a4a', diggable: true, hardness: 3, drops: { wood: 2 }, coins: 0 },
+  // Biome hazards (appended ids — keep index order stable for saves)
+  aquifer: {
+    name: 'Aquifer',
+    color: '#3a6a8a',
+    edge: '#1a3a52',
+    hi: '#7ab0d0',
+    diggable: true,
+    hardness: 9,
+    drops: { stone: 1 },
+    coins: 0,
+    hazard: 'flood',
+  },
+  lava: {
+    name: 'Lava',
+    color: '#c45c2a',
+    edge: '#6a2010',
+    hi: '#e8a030',
+    diggable: true,
+    hardness: 16,
+    drops: { stone: 1 },
+    coins: 0,
+    hazard: 'burn',
+  },
+  gas: {
+    name: 'Gas pocket',
+    color: '#6a7a48',
+    edge: '#3a4428',
+    hi: '#b8c868',
+    diggable: true,
+    hardness: 6,
+    drops: {},
+    coins: 0,
+    hazard: 'blast',
+  },
+};
+
+/** Dig-hazard tuning for aquifer / lava / gas biomes. */
+export const BIOME = {
+  /** Tile-equivalents dumped into the shaft when an aquifer is breached. */
+  AQUIFER_FLOOD: 3.5,
+  /** Vitality/sec while standing next to revealed lava. */
+  LAVA_BURN_PER_SEC: 3.2,
+  /** Instant vitality hit when a lava tile is broken nearby. */
+  LAVA_BREACH_DAMAGE: 10,
+  /** Manhattan radius for gas pocket blast. */
+  GAS_RADIUS: 3,
+  /** Vitality damage to diggers in the blast. */
+  GAS_DAMAGE: 16,
+  /** HP cracked off neighboring diggable tiles on gas breach. */
+  GAS_CRACK: 9,
 };
 
 export const RESOURCE_META = {
@@ -455,6 +505,9 @@ export const SEEN_DIG_TYPES = [
   'shell',
   'seal',
   'core',
+  'aquifer',
+  'lava',
+  'gas',
 ];
 
 export const DIG_FILTERS = [
@@ -539,6 +592,14 @@ export const DIG_FILTERS = [
     match: ['core'],
     blurb: 'Dig the yellow core (prestige ×5+).',
     requireSeen: 'core',
+  },
+  {
+    id: 'hazard',
+    label: 'Hazards',
+    short: 'Z',
+    match: ['aquifer', 'lava', 'gas'],
+    blurb: 'Aquifers flood, lava burns, gas pockets explode.',
+    requireSeenAny: ['aquifer', 'lava', 'gas'],
   },
 ];
 
@@ -683,6 +744,24 @@ export const ACHIEVEMENTS = [
     name: 'The Center',
     blurb: 'Crack the yellow core.',
     group: 'cube',
+  },
+  {
+    id: 'biome_aquifer',
+    name: 'Wet stone',
+    blurb: 'Breach an aquifer — water floods the shaft.',
+    group: 'biome',
+  },
+  {
+    id: 'biome_lava',
+    name: 'Heat below',
+    blurb: 'Reveal or break lava. Stay clear of the glow.',
+    group: 'biome',
+  },
+  {
+    id: 'biome_gas',
+    name: 'Bad air',
+    blurb: 'Breach a gas pocket — it detonates.',
+    group: 'biome',
   },
 ];
 

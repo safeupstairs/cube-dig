@@ -107,6 +107,30 @@ export function createRenderer(canvas) {
       }
     }
 
+    // Biome tells — wet sheen / glow / sickly gas flecks
+    if (id === 'aquifer') {
+      ctx.fillStyle = 'rgba(120, 180, 220, 0.35)';
+      ctx.fillRect(px + cw * 0.15, py + ch * 0.2, cw * 0.7, Math.max(2, ch * 0.12));
+      ctx.fillStyle = 'rgba(180, 220, 240, 0.4)';
+      ctx.fillRect(px + cw * 0.4, py + ch * 0.55, Math.max(2, cw * 0.15), Math.max(2, ch * 0.1));
+    } else if (id === 'lava') {
+      const pulse = 0.45 + 0.55 * Math.sin(performance.now() / 280 + x * 0.7 + y);
+      ctx.fillStyle = pulse > 0.55 ? 'rgba(255, 200, 80, 0.45)' : 'rgba(220, 80, 30, 0.35)';
+      ctx.fillRect(px + cw * 0.25, py + ch * 0.35, cw * 0.5, Math.max(2, ch * 0.2));
+      if (pulse > 0.7) {
+        ctx.fillStyle = 'rgba(255, 240, 160, 0.5)';
+        ctx.fillRect(px + cw * 0.4, py + ch * 0.25, Math.max(1, cw * 0.12), Math.max(1, ch * 0.1));
+      }
+    } else if (id === 'gas') {
+      const gh = hash2(x + 41, y + 17);
+      ctx.fillStyle = 'rgba(200, 220, 100, 0.28)';
+      ctx.fillRect(px + ((gh & 7) / 8) * cw * 0.5, py + (((gh >> 3) & 7) / 8) * ch * 0.5, Math.max(2, cw * 0.2), Math.max(2, ch * 0.15));
+      if ((gh & 3) === 1) {
+        ctx.fillStyle = 'rgba(180, 200, 80, 0.35)';
+        ctx.fillRect(px + cw * 0.55, py + ch * 0.2, Math.max(1, cw * 0.12), Math.max(1, ch * 0.12));
+      }
+    }
+
     if (id === 'grass') {
       // Tufts along the top edge
       ctx.fillStyle = hi;

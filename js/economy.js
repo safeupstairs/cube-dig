@@ -63,7 +63,10 @@ export function canScratchTile(state, tileId) {
     tileId === 'tree' ||
     tileId === 'stone' ||
     tileId === 'coal' ||
-    tileId === 'iron'
+    tileId === 'iron' ||
+    tileId === 'aquifer' ||
+    tileId === 'lava' ||
+    tileId === 'gas'
   ) {
     return true;
   }
