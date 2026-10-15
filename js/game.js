@@ -3654,6 +3654,41 @@ function clearCanvasHover() {
   updateWorldCursor();
 }
 
+/** Snapshot distance + midpoint from the first two active canvas pointers. */
+function pinchSample() {
+  if (canvasPointers.size < 2) return null;
+  const pts = canvasPointers.values();
+  const a = pts.next().value;
+  const b = pts.next().value;
+  return {
+    dist: Math.hypot(b.x - a.x, b.y - a.y),
+    midX: (a.x + b.x) / 2,
+    midY: (a.y + b.y) / 2,
+  };
+}
+
+/**
+ * Scale zoom by factor (clamped ~0.3–4.5), keeping the world point under
+ * the given client coords fixed on screen.
+ */
+function zoomAtClient(clientX, clientY, factor) {
+  const rect = els.canvas.getBoundingClientRect();
+  const sx = clientX - rect.left;
+  const sy = clientY - rect.top;
+  const before = renderer.screenToWorld(sx, sy);
+  renderer.cam.zoom = Math.max(0.3, Math.min(4.5, renderer.cam.zoom * factor));
+  const after = renderer.screenToWorld(sx, sy);
+  renderer.cam.x += before.x - after.x;
+  renderer.cam.y += before.y - after.y;
+}
+
+function beginPinch() {
+  dragging = false;
+  lastPan = null;
+  dragMoved = true; // two-finger gesture — never dig on release
+  pinchLast = pinchSample();
+}
+
 function onPointerDown(e) {
   unlockAudio();
   // RMB: exit sticky place/hire/demolish → dig. Must run here — preventDefault on
@@ -3663,21 +3698,43 @@ function onPointerDown(e) {
     e.preventDefault();
   }
   canvasPress = true;
+  canvasPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try {
     els.canvas.setPointerCapture(e.pointerId);
   } catch {
     /* */
   }
-  dragging = true;
-  dragMoved = false;
-  lastPan = { x: e.clientX, y: e.clientY };
+  if (canvasPointers.size >= 2) {
+    beginPinch();
+  } else {
+    dragging = true;
+    dragMoved = false;
+    pinchLast = null;
+    lastPan = { x: e.clientX, y: e.clientY };
+  }
   syncHoverFromClient(e.clientX, e.clientY);
   if (e.button !== 0) e.preventDefault();
 }
 
 function onPointerMove(e) {
+  if (canvasPointers.has(e.pointerId)) {
+    canvasPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
   if (!canvasPress) {
     syncHoverFromClient(e.clientX, e.clientY);
+    return;
+  }
+
+  // Two-finger pinch: zoom toward midpoint (same limits as wheel)
+  if (canvasPointers.size >= 2) {
+    if (!pinchLast) beginPinch();
+    const sample = pinchSample();
+    if (sample && pinchLast && pinchLast.dist > 1 && sample.dist > 1) {
+      zoomAtClient(sample.midX, sample.midY, sample.dist / pinchLast.dist);
+      syncHoverFromClient(sample.midX, sample.midY);
+    }
+    pinchLast = sample;
     return;
   }
 
@@ -3698,17 +3755,38 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
-  if (!canvasPress) return;
-  canvasPress = false;
-  const wasDrag = dragMoved;
-  dragging = false;
-  lastPan = null;
+  if (canvasPointers.has(e.pointerId)) {
+    canvasPointers.delete(e.pointerId);
+  }
   try {
     els.canvas.releasePointerCapture(e.pointerId);
   } catch {
     /* */
   }
-  if (wasDrag || e.button !== 0) return;
+
+  // Still two+ fingers: keep pinching
+  if (canvasPointers.size >= 2) {
+    pinchLast = pinchSample();
+    return;
+  }
+
+  // One finger left after a pinch: resume pan, never dig for this gesture
+  if (canvasPointers.size === 1) {
+    pinchLast = null;
+    const rem = canvasPointers.values().next().value;
+    dragging = true;
+    lastPan = { x: rem.x, y: rem.y };
+    return;
+  }
+
+  // All fingers up
+  const wasDrag = dragMoved;
+  const canDig = canvasPress && !wasDrag && e.button === 0;
+  canvasPress = false;
+  dragging = false;
+  lastPan = null;
+  pinchLast = null;
+  if (!canDig) return;
 
   const rect = els.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
@@ -3795,21 +3873,36 @@ function onPointerUp(e) {
   save();
 }
 
-function onPointerCancel() {
+function onPointerCancel(e) {
+  if (e && canvasPointers.has(e.pointerId)) {
+    canvasPointers.delete(e.pointerId);
+  }
+  if (canvasPointers.size >= 2) {
+    pinchLast = pinchSample();
+    return;
+  }
+  if (canvasPointers.size === 1) {
+    pinchLast = null;
+    const rem = canvasPointers.values().next().value;
+    dragging = true;
+    lastPan = { x: rem.x, y: rem.y };
+    return;
+  }
   canvasPress = false;
   dragging = false;
   lastPan = null;
+  pinchLast = null;
 }
 
 function onWheel(e) {
   e.preventDefault();
   const factor = e.deltaY > 0 ? 0.9 : 1.1;
-  renderer.cam.zoom = Math.max(0.3, Math.min(4.5, renderer.cam.zoom * factor));
-  // Wheel does not fire pointermove — recompute under cursor so tile/worker hover
-  // (highlight ring + inspect) does not stick to the pre-zoom world cell.
+  // Zoom toward cursor (same path as pinch midpoint)
   if (typeof e.clientX === 'number') {
+    zoomAtClient(e.clientX, e.clientY, factor);
     syncHoverFromClient(e.clientX, e.clientY);
   } else {
+    renderer.cam.zoom = Math.max(0.3, Math.min(4.5, renderer.cam.zoom * factor));
     refreshHoverAfterCamera();
   }
 }
