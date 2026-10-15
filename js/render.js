@@ -1,4 +1,5 @@
 import { digFilterById, TILE, TILES } from './data.js';
+import { drawBuildingSprite, drawPineTreeSprite, pxRect as fillPxRect } from './sprites.js';
 import { isExposed, isRevealed } from './world.js';
 
 /**
@@ -44,8 +45,7 @@ export function createRenderer(canvas) {
   }
 
   function pxRect(ox, oy, x, y, w, h, color) {
-    ctx.fillStyle = color;
-    ctx.fillRect(ox + x, oy + y, w, h);
+    fillPxRect(ctx, ox, oy, x, y, w, h, color);
   }
 
   /** Deterministic cheap hash for dither / speckles (tile-local). */
@@ -143,21 +143,7 @@ export function createRenderer(canvas) {
   }
 
   function drawPineTree(px, py, tw) {
-    const s = tw / 16;
-    // Trunk
-    pxRect(px, py, 7 * s, 10 * s, 2 * s, 5 * s, '#5a3a22');
-    pxRect(px, py, 6 * s, 14 * s, 4 * s, 1 * s, '#4a2e18');
-    // Layered pine canopy (dark → mid → tip highlight)
-    pxRect(px, py, 4 * s, 8 * s, 8 * s, 3 * s, '#1e4a24');
-    pxRect(px, py, 3 * s, 9 * s, 10 * s, 2 * s, '#2a5a28');
-    pxRect(px, py, 5 * s, 5 * s, 6 * s, 4 * s, '#2f6a32');
-    pxRect(px, py, 4 * s, 6 * s, 8 * s, 2 * s, '#3a7a3a');
-    pxRect(px, py, 6 * s, 2 * s, 4 * s, 4 * s, '#3f8a3a');
-    pxRect(px, py, 7 * s, 1 * s, 2 * s, 2 * s, '#5aaa4a');
-    // Needle highlights
-    pxRect(px, py, 6 * s, 3 * s, 1 * s, 1 * s, '#7aca68');
-    pxRect(px, py, 8 * s, 6 * s, 1 * s, 1 * s, '#6aba58');
-    pxRect(px, py, 5 * s, 8 * s, 1 * s, 1 * s, '#4a8a40');
+    drawPineTreeSprite(ctx, px, py, tw);
   }
 
   function drawWorker(px, py, tw, wkr, selected, number = 0) {
@@ -271,192 +257,28 @@ export function createRenderer(canvas) {
     pxRect(px, py, 7 * s, 9 * s, 2 * s, 3 * s, '#2a2a30');
   }
 
-  /** Pixel silhouettes for buildings — designed for ~16 unit grid scaled by tw. */
   function drawBuilding(px, py, tw, b) {
-    const id = b.id;
-    const s = tw / 16;
-    const idle = !!b.mineIdle;
-    const t = performance.now() / 400;
+    drawBuildingSprite(ctx, px, py, tw, b);
+  }
 
-    // floor pad
-    pxRect(px, py, 1 * s, 14 * s, 14 * s, 2 * s, '#2a2218');
-
-    if (id === 'shack') {
-      // wood walls + grain
-      pxRect(px, py, 2 * s, 6 * s, 12 * s, 8 * s, '#8a6040');
-      pxRect(px, py, 2 * s, 7 * s, 12 * s, 1 * s, '#7a5030');
-      pxRect(px, py, 2 * s, 10 * s, 12 * s, 1 * s, '#7a5030');
-      pxRect(px, py, 2 * s, 6 * s, 12 * s, 1 * s, '#6a4428');
-      // roof
-      pxRect(px, py, 1 * s, 4 * s, 14 * s, 2 * s, '#5a3020');
-      pxRect(px, py, 3 * s, 3 * s, 10 * s, 1 * s, '#4a2818');
-      pxRect(px, py, 2 * s, 4 * s, 1 * s, 2 * s, '#7a4830');
-      // door
-      pxRect(px, py, 6 * s, 9 * s, 4 * s, 5 * s, '#3a2210');
-      pxRect(px, py, 8 * s, 11 * s, 1 * s, 1 * s, '#c4a35a');
-      // window glow
-      pxRect(px, py, 3 * s, 8 * s, 2 * s, 2 * s, '#e8d48a');
-      pxRect(px, py, 11 * s, 8 * s, 2 * s, 2 * s, '#c8d8e8');
-    } else if (id === 'mine') {
-      // drill frame + rivets
-      pxRect(px, py, 3 * s, 5 * s, 10 * s, 9 * s, '#4a4a58');
-      pxRect(px, py, 4 * s, 4 * s, 8 * s, 2 * s, '#6a6a78');
-      pxRect(px, py, 4 * s, 6 * s, 1 * s, 1 * s, '#8a8a98');
-      pxRect(px, py, 11 * s, 6 * s, 1 * s, 1 * s, '#8a8a98');
-      // bore bit
-      const glow = idle ? '#c45c4a' : '#6a9e6a';
-      pxRect(px, py, 7 * s, 8 * s, 2 * s, 6 * s, '#2a2a32');
-      pxRect(px, py, 6 * s, 10 * s, 4 * s, 2 * s, glow);
-      if (!idle) {
-        const wobble = Math.sin(t * 8) > 0 ? 1 : 0;
-        pxRect(px, py, (7 + wobble) * s, 13 * s, 2 * s, 1 * s, '#9aa3b5');
-      }
-      // status lamp
-      pxRect(px, py, 12 * s, 5 * s, 2 * s, 2 * s, glow);
-      pxRect(px, py, 2 * s, 12 * s, 3 * s, 2 * s, '#3a3a48');
-      pxRect(px, py, 11 * s, 12 * s, 3 * s, 2 * s, '#3a3a48');
-    } else if (id === 'smelter') {
-      // furnace body (surface camp)
-      pxRect(px, py, 3 * s, 7 * s, 10 * s, 7 * s, '#6a3830');
-      pxRect(px, py, 4 * s, 8 * s, 8 * s, 5 * s, '#8a4030');
-      pxRect(px, py, 4 * s, 8 * s, 8 * s, 1 * s, '#a05038');
-      // chimney
-      pxRect(px, py, 10 * s, 2 * s, 3 * s, 6 * s, '#4a2a28');
-      pxRect(px, py, 9 * s, 2 * s, 5 * s, 1 * s, '#3a1a18');
-      // fire mouth — flicker only while refining
-      const lit = b.smeltIdle === false;
-      const flame = lit ? 0.5 + 0.5 * Math.sin(t * 5) : 0;
-      pxRect(px, py, 5 * s, 10 * s, 4 * s, 3 * s, '#1a1010');
-      pxRect(
-        px,
-        py,
-        6 * s,
-        11 * s,
-        2 * s,
-        2 * s,
-        lit ? (flame > 0.45 ? '#e8a030' : '#c45c4a') : '#3a2018'
-      );
-      if (lit && flame > 0.7) {
-        pxRect(px, py, 6.5 * s, 10 * s, 1 * s, 1 * s, '#fff0a0');
-      }
-      // smoke puff while working
-      if (lit && flame > 0.55) {
-        pxRect(px, py, 11 * s, 0 * s, 2 * s, 2 * s, '#6a6a6a');
-        pxRect(px, py, 12 * s, 0 * s, 1 * s, 1 * s, '#8a8a8a');
-      }
-    } else if (id === 'grove') {
-      // nursery hut
-      pxRect(px, py, 4 * s, 7 * s, 9 * s, 7 * s, '#4a8a4a');
-      pxRect(px, py, 4 * s, 6 * s, 9 * s, 1 * s, '#2a5a2a');
-      pxRect(px, py, 5 * s, 8 * s, 2 * s, 2 * s, '#e8d48a');
-      // planter beds
-      pxRect(px, py, 1 * s, 11 * s, 4 * s, 2 * s, '#5a3a22');
-      pxRect(px, py, 2 * s, 10 * s, 1 * s, 2 * s, '#6a9a5a');
-      pxRect(px, py, 4 * s, 9 * s, 1 * s, 3 * s, '#3a7a3a');
-      // sapling
-      pxRect(px, py, 12 * s, 9 * s, 1 * s, 5 * s, '#5a3a22');
-      pxRect(px, py, 11 * s, 7 * s, 3 * s, 3 * s, '#5aaa5a');
-      pxRect(px, py, 12 * s, 6 * s, 1 * s, 1 * s, '#7aca7a');
-    } else if (id === 'market') {
-      // canvas stall + counter (village market)
-      pxRect(px, py, 2 * s, 8 * s, 12 * s, 6 * s, '#6a5040');
-      pxRect(px, py, 3 * s, 9 * s, 10 * s, 4 * s, '#8a6a48');
-      pxRect(px, py, 3 * s, 9 * s, 10 * s, 1 * s, '#9a7a58');
-      // awning posts
-      pxRect(px, py, 2 * s, 4 * s, 1 * s, 5 * s, '#5a3a22');
-      pxRect(px, py, 13 * s, 4 * s, 1 * s, 5 * s, '#5a3a22');
-      // striped awning
-      pxRect(px, py, 2 * s, 3 * s, 12 * s, 2 * s, '#c45c4a');
-      pxRect(px, py, 4 * s, 3 * s, 2 * s, 2 * s, '#e8d48a');
-      pxRect(px, py, 8 * s, 3 * s, 2 * s, 2 * s, '#e8d48a');
-      pxRect(px, py, 12 * s, 3 * s, 1 * s, 2 * s, '#e8d48a');
-      // coin pile on counter
-      pxRect(px, py, 6 * s, 10 * s, 2 * s, 2 * s, '#e8d48a');
-      pxRect(px, py, 9 * s, 11 * s, 2 * s, 1 * s, '#c4a35a');
-      // little fence post framing the square
-      pxRect(px, py, 0 * s, 11 * s, 1 * s, 3 * s, '#5a3a22');
-      pxRect(px, py, 15 * s, 11 * s, 1 * s, 3 * s, '#5a3a22');
-    } else if (id === 'cottage') {
-      // cozy village hut (rest like a shack — no hire seats)
-      pxRect(px, py, 3 * s, 7 * s, 10 * s, 7 * s, '#7a5840');
-      pxRect(px, py, 3 * s, 7 * s, 10 * s, 1 * s, '#5a3a28');
-      pxRect(px, py, 2 * s, 5 * s, 12 * s, 2 * s, '#5a3020');
-      pxRect(px, py, 4 * s, 4 * s, 8 * s, 1 * s, '#4a2818');
-      pxRect(px, py, 7 * s, 10 * s, 3 * s, 4 * s, '#3a2210');
-      pxRect(px, py, 4 * s, 9 * s, 2 * s, 2 * s, '#e8d48a');
-      pxRect(px, py, 11 * s, 9 * s, 1 * s, 2 * s, '#c8d8e8');
-      // flower box
-      pxRect(px, py, 1 * s, 12 * s, 2 * s, 2 * s, '#5a3a22');
-      pxRect(px, py, 1 * s, 11 * s, 1 * s, 1 * s, '#6a9a5a');
-      pxRect(px, py, 2 * s, 11 * s, 1 * s, 1 * s, '#c45c4a');
-    } else if (id === 'stall') {
-      // neighbor produce stall + low fence
-      pxRect(px, py, 3 * s, 9 * s, 10 * s, 5 * s, '#8a6a48');
-      pxRect(px, py, 3 * s, 8 * s, 10 * s, 1 * s, '#6a5040');
-      pxRect(px, py, 3 * s, 5 * s, 1 * s, 4 * s, '#5a3a22');
-      pxRect(px, py, 12 * s, 5 * s, 1 * s, 4 * s, '#5a3a22');
-      pxRect(px, py, 3 * s, 4 * s, 10 * s, 2 * s, '#6a9a5a');
-      pxRect(px, py, 5 * s, 4 * s, 2 * s, 2 * s, '#c45c4a');
-      pxRect(px, py, 9 * s, 4 * s, 2 * s, 2 * s, '#e8d48a');
-      // baskets
-      pxRect(px, py, 5 * s, 10 * s, 2 * s, 2 * s, '#c45c4a');
-      pxRect(px, py, 9 * s, 11 * s, 2 * s, 1 * s, '#6a9a5a');
-      // fence rail
-      pxRect(px, py, 0 * s, 12 * s, 3 * s, 1 * s, '#5a3a22');
-      pxRect(px, py, 13 * s, 12 * s, 3 * s, 1 * s, '#5a3a22');
-      pxRect(px, py, 0 * s, 11 * s, 1 * s, 3 * s, '#5a3a22');
-      pxRect(px, py, 15 * s, 11 * s, 1 * s, 3 * s, '#5a3a22');
-    } else if (id === 'chapel') {
-      // stone clinic / chapel
-      pxRect(px, py, 2 * s, 7 * s, 12 * s, 7 * s, '#7a6a58');
-      pxRect(px, py, 3 * s, 8 * s, 1 * s, 1 * s, '#9a8a78');
-      pxRect(px, py, 12 * s, 10 * s, 1 * s, 1 * s, '#5a4a3a');
-      pxRect(px, py, 3 * s, 5 * s, 10 * s, 2 * s, '#5a4a3a');
-      pxRect(px, py, 7 * s, 2 * s, 2 * s, 4 * s, '#c4a35a');
-      pxRect(px, py, 5 * s, 3 * s, 6 * s, 1 * s, '#c4a35a');
-      pxRect(px, py, 6 * s, 9 * s, 4 * s, 5 * s, '#3a2a20');
-      pxRect(px, py, 4 * s, 8 * s, 2 * s, 2 * s, '#d8e0e8');
-      pxRect(px, py, 10 * s, 8 * s, 2 * s, 2 * s, '#d8e0e8');
-    } else if (id === 'ward') {
-      // lantern post
-      pxRect(px, py, 7 * s, 4 * s, 2 * s, 10 * s, '#4a3a48');
-      pxRect(px, py, 5 * s, 3 * s, 6 * s, 3 * s, '#5a4860');
-      const glow = 0.45 + 0.55 * Math.sin(t * 3);
-      pxRect(px, py, 6 * s, 4 * s, 4 * s, 2 * s, glow > 0.6 ? '#e8d48a' : '#c4a35a');
-      if (glow > 0.55) {
-        pxRect(px, py, 5 * s, 5 * s, 6 * s, 1 * s, 'rgba(232,212,138,0.35)');
-      }
-      pxRect(px, py, 4 * s, 13 * s, 8 * s, 1 * s, '#2a2228');
-    } else if (id === 'pump') {
-      // shaft pump — tank + pipe (chug only while draining water)
-      pxRect(px, py, 3 * s, 6 * s, 10 * s, 8 * s, '#4a6a7a');
-      pxRect(px, py, 4 * s, 7 * s, 8 * s, 5 * s, '#3a5a68');
-      pxRect(px, py, 4 * s, 7 * s, 8 * s, 1 * s, '#6a8a98');
-      pxRect(px, py, 6 * s, 3 * s, 4 * s, 4 * s, '#5a7a88');
-      pxRect(px, py, 7 * s, 1 * s, 2 * s, 3 * s, '#2a3a48');
-      const working = !!b.pumpWorking;
-      const chug = working ? 0.5 + 0.5 * Math.sin(t * 4) : 0;
-      pxRect(px, py, 5 * s, 9 * s, 6 * s, 2 * s, chug > 0.5 ? '#6a9ec8' : '#4a7a98');
-      pxRect(px, py, 2 * s, 12 * s, 3 * s, 2 * s, '#2a3a42');
-      pxRect(px, py, 11 * s, 12 * s, 3 * s, 2 * s, '#2a3a42');
-    } else if (id === 'listening') {
-      // Listening post — dish + brass ear toward the deep
-      pxRect(px, py, 3 * s, 8 * s, 10 * s, 6 * s, '#4a5568');
-      pxRect(px, py, 4 * s, 9 * s, 8 * s, 4 * s, '#6a7a9a');
-      pxRect(px, py, 7 * s, 4 * s, 2 * s, 5 * s, '#3a4450');
-      pxRect(px, py, 5 * s, 3 * s, 6 * s, 2 * s, '#8a9ab0');
-      const ping = 0.45 + 0.55 * Math.sin(t * 2.4);
-      pxRect(px, py, 6 * s, 2 * s, 4 * s, 2 * s, ping > 0.55 ? '#c8d8f0' : '#9ab8e8');
-      pxRect(px, py, 6 * s, 10 * s, 4 * s, 2 * s, '#c4a35a');
-      if (ping > 0.7) {
-        pxRect(px, py, 4 * s, 1 * s, 8 * s, 1 * s, 'rgba(154,184,232,0.35)');
-      }
-    } else {
-      pxRect(px, py, 2 * s, 4 * s, 12 * s, 10 * s, b.def?.color || '#5a5a5a');
-    }
-
-    ctx.strokeStyle = '#1a1410';
-    ctx.strokeRect(px + 0.5, py + 0.5, tw - 1, tw - 1);
+  /** Thin craft progress bar above smelters / refineries while working. */
+  function drawSmeltProgress(px, py, tw, b) {
+    if (b.id !== 'smelter' && b.id !== 'refinery') return;
+    if (b.smeltIdle !== false) return;
+    const p = Math.max(0, Math.min(1, b.smeltProgress || 0));
+    if (p <= 0.001) return;
+    const pad = Math.max(1, Math.floor(tw * 0.08));
+    const barH = Math.max(2, Math.floor(tw * 0.12));
+    const barY = py - barH - Math.max(1, Math.floor(tw * 0.06));
+    const barW = tw - pad * 2;
+    const fillW = Math.max(1, Math.floor(barW * p));
+    ctx.fillStyle = 'rgba(10, 12, 14, 0.75)';
+    ctx.fillRect(px + pad, barY, barW, barH);
+    ctx.fillStyle = b.id === 'refinery' ? '#8ab0c8' : '#c4a35a';
+    ctx.fillRect(px + pad, barY, fillW, barH);
+    ctx.strokeStyle = 'rgba(232, 212, 138, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + pad + 0.5, barY + 0.5, barW - 1, barH - 1);
   }
 
   const OVERLAY_TINTS = {
@@ -466,7 +288,8 @@ export function createRenderer(canvas) {
     red: { fill: '196,92,74', edge: '232,140,120', fog: '196,92,74' },
     cream: { fill: '200,180,140', edge: '232,212,180', fog: '200,180,140' },
     violet: { fill: '90,72,96', edge: '160,130,170', fog: '90,72,96' },
-    teal: { fill: '74,106,122', edge: '106,158,200', fog: '74,106,122' },
+    // Brighter cyan so the dry ring reads against flood blues
+    teal: { fill: '56,168,168', edge: '120,228,210', fog: '56,168,168' },
   };
 
   function tintOf(marker) {
@@ -483,24 +306,24 @@ export function createRenderer(canvas) {
     const revealed = isRevealed(world, tx, ty);
     if (revealed) {
       ctx.fillStyle = edge
-        ? `rgba(${tint.fill},${0.28 * alpha})`
+        ? `rgba(${tint.fill},${0.34 * alpha})`
         : checker
-          ? `rgba(${tint.fill},${0.16 * alpha})`
-          : `rgba(${tint.edge},${0.1 * alpha})`;
+          ? `rgba(${tint.fill},${0.22 * alpha})`
+          : `rgba(${tint.edge},${0.14 * alpha})`;
       ctx.fillRect(px, py, cw, ch);
       ctx.strokeStyle = edge
-        ? `rgba(${tint.edge},${0.75 * alpha})`
-        : `rgba(${tint.fill},${0.35 * alpha})`;
+        ? `rgba(${tint.edge},${0.85 * alpha})`
+        : `rgba(${tint.fill},${0.42 * alpha})`;
       ctx.lineWidth = edge ? 2 : 1;
       if (edge || checker) ctx.strokeRect(px + 1, py + 1, cw - 2, ch - 2);
       ctx.lineWidth = 1;
     } else {
       ctx.strokeStyle = edge
-        ? `rgba(${tint.fog},${0.45 * alpha})`
-        : `rgba(${tint.fill},${0.22 * alpha})`;
+        ? `rgba(${tint.fog},${0.5 * alpha})`
+        : `rgba(${tint.fill},${0.26 * alpha})`;
       ctx.strokeRect(px + 2, py + 2, cw - 4, ch - 4);
       if (edge && checker) {
-        ctx.fillStyle = `rgba(${tint.fog},${0.12 * alpha})`;
+        ctx.fillStyle = `rgba(${tint.fog},${0.14 * alpha})`;
         ctx.fillRect(
           px + cw * 0.35,
           py + ch * 0.35,
@@ -811,7 +634,10 @@ export function createRenderer(canvas) {
     for (const b of state.buildings) {
       if (!isRevealed(world, b.x, b.y)) continue;
       const s = worldToScreen(b.x, b.y, shake);
-      drawBuilding(Math.floor(s.x), Math.floor(s.y), tw, b);
+      const bx = Math.floor(s.x);
+      const by = Math.floor(s.y);
+      drawBuilding(bx, by, tw, b);
+      drawSmeltProgress(bx, by, tw, b);
     }
 
     for (const m of state.monsters || []) {

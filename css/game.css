@@ -374,6 +374,15 @@ body {
   align-items: center;
 }
 
+.layer-name {
+  font-family: var(--pixel);
+  font-size: 0.42rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .depth-bar {
   position: relative;
   flex: 1;
@@ -1070,6 +1079,7 @@ body {
 
 .btn {
   appearance: none;
+  display: inline-block;
   border: 2px solid #0a0c0e;
   border-radius: 2px;
   box-shadow:
@@ -1084,6 +1094,13 @@ body {
   cursor: pointer;
   width: 100%;
   margin-top: 0.3rem;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+a.btn:hover {
+  color: var(--text);
 }
 
 .btn:hover:not(:disabled) {
@@ -1540,6 +1557,20 @@ body {
   color: var(--muted);
 }
 
+.build-place.hidden {
+  display: none;
+}
+
+.building-orders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.building-orders.hidden {
+  display: none;
+}
+
 .orders {
   display: flex;
   flex-direction: column;
@@ -1754,6 +1785,8 @@ body {
 .tutorial-card .btn {
   margin-top: 0;
 }
+
+/* Wiki lives at /wiki (standalone page) — Prestige → Wiki opens it in a new tab */
 
 /* DEBUG / CHEATS — pixel HUD, obviously not production UI */
 .cheat-panel {

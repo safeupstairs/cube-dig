@@ -6,6 +6,7 @@ import {
   BIOME,
   DIG_FILTERS,
   DIG_HEADINGS,
+  DIG_STANCES,
   SEEN_DIG_TYPES,
   ENDING_TEXT,
   MAP_H,
@@ -13,7 +14,11 @@ import {
   MONSTER,
   PUMP_RADIUS,
   RESOURCE_META,
+  REFINE_RECIPES,
   SHARD_UPGRADES,
+  SMELT_INTERVAL,
+  SMELT_RECIPES,
+  REFINE_INTERVAL,
   TILES,
   UPGRADES,
   VITALITY_DRAIN_PER_DIG,
@@ -23,8 +28,11 @@ import {
   achievementById,
   digFilterById,
   digHeadingById,
+  digLayerAt,
+  digStanceById,
   echoSensePulseRadii,
   echoSenseTier,
+  formatRecipeLine,
   PRESTIGE_DEPTH_RATIO,
   PRESTIGE_MIN_COLUMNS,
   prestigeDepthShards,
@@ -44,6 +52,7 @@ import {
   canAffordCost,
   canScratchTile,
   digPower,
+  drillBoreRate,
   maxHardness,
   nextWorkerCost,
   payCost,
@@ -96,6 +105,7 @@ const els = {
   shards: document.getElementById('stat-shards'),
   prestige: document.getElementById('stat-prestige'),
   depth: document.getElementById('stat-depth'),
+  layer: document.getElementById('stat-layer'),
   depthFill: document.getElementById('depth-fill'),
   depthSense: document.getElementById('depth-sense'),
   bags: document.getElementById('bags'),
@@ -110,6 +120,9 @@ const els = {
   resetBtn: document.getElementById('reset-btn'),
   introBtn: document.getElementById('intro-btn'),
   hotbar: document.getElementById('hotbar'),
+  buildingOrders: document.getElementById('building-orders'),
+  buildPlace: document.getElementById('build-place'),
+  buildPanelTitle: document.getElementById('build-panel-title'),
   crewHire: document.getElementById('crew-hire'),
   menuRail: document.getElementById('menu-rail'),
   dock: document.getElementById('dock'),
@@ -122,6 +135,7 @@ const els = {
   tutorialTitle: document.getElementById('tutorial-title'),
   tutorialBody: document.getElementById('tutorial-body'),
   tutorialOk: document.getElementById('tutorial-ok'),
+  wikiBtn: document.getElementById('wiki-btn'),
   canvas: document.getElementById('world'),
   tip: document.getElementById('tip'),
   orders: document.getElementById('orders'),
@@ -135,6 +149,21 @@ const els = {
   cheatFreeBuild: document.getElementById('cheat-free-build'),
   cheatPauseWeather: document.getElementById('cheat-pause-weather'),
 };
+
+/** Pump dry radius after Pump coils. */
+function effectivePumpRadius() {
+  return PUMP_RADIUS + (state?.upgrades?.pump_coil || 0);
+}
+
+/** Ward burn radius after Bright wards. */
+function effectiveWardRadius() {
+  return WARD_RADIUS + (state?.upgrades?.bright_wards || 0) * 1.5;
+}
+
+/** Ward DPS after Bright wards. */
+function effectiveWardDps() {
+  return WARD_DPS * (1 + (state?.upgrades?.bright_wards || 0) * 0.35);
+}
 
 const renderer = createRenderer(els.canvas);
 const fx = createFx();
@@ -261,13 +290,12 @@ function buildingCount(id) {
 }
 
 /**
- * Hard placement cap — only starter / non-hotbar pieces (market, cottage, stall).
- * Placeable buildings scale in price instead of hard-capping.
+ * Hard placement cap when BUILDINGS[id].max is set (Listening Post, village starters).
+ * Buildings without max scale in price instead.
  */
 function buildingAtCap(id) {
   const def = BUILDINGS[id];
   if (!def || def.max == null) return false;
-  if (isHotbarBuilding(def) && !def.starter) return false;
   return buildingCount(id) >= def.max;
 }
 
@@ -538,6 +566,18 @@ function tipContentAt(x, y) {
     if (bld.id === 'mine') {
       lines.push({ text: describeMineStatus(bld), muted: true });
     }
+    if (bld.id === 'smelter') {
+      lines.push({
+        text: `Recipe: ${recipeModeLabel(bld, SMELT_RECIPES)} (click to lock)`,
+        muted: true,
+      });
+    }
+    if (bld.id === 'refinery') {
+      lines.push({
+        text: `Recipe: ${recipeModeLabel(bld, REFINE_RECIPES)} (click to lock)`,
+        muted: true,
+      });
+    }
     lines.push({ text: `(${x},${y})`, muted: true });
     return { title: name, lines };
   }
@@ -592,7 +632,25 @@ function updateInspect() {
       status = bld.mineIdle || !bld.mineTargetName ? 'Idle' : 'Boring';
     } else if (bld.id === 'grove') status = 'Planting';
     else if (bld.id === 'smelter') {
-      status = bld.smeltIdle === false ? 'Smelting' : 'Idle — need ore + coal';
+      const mode = recipeModeLabel(bld, SMELT_RECIPES);
+      const pct =
+        bld.smeltIdle === false
+          ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
+          : '';
+      status =
+        bld.smeltIdle === false
+          ? `Smelting ${RESOURCE_META[bld.smeltProduct]?.name || 'bars'}${pct} (${mode})`
+          : `Idle — ${mode} · need ore + coal`;
+    } else if (bld.id === 'refinery') {
+      const mode = recipeModeLabel(bld, REFINE_RECIPES);
+      const pct =
+        bld.smeltIdle === false
+          ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
+          : '';
+      status =
+        bld.smeltIdle === false
+          ? `Refining ${RESOURCE_META[bld.smeltProduct]?.name || 'goods'}${pct} (${mode})`
+          : `Idle — ${mode} · need inputs`;
     } else if (bld.id === 'market') status = 'Open for trade';
     else if (bld.id === 'cottage') status = 'Rest';
     else if (bld.id === 'stall') status = 'Village';
@@ -791,7 +849,9 @@ function checkDepthAchievements() {
   if (depth >= 0.08) unlockAchievement('layer_stone');
   if (depth >= MONSTER.spawnDepthRatio) unlockAchievement('layer_dread');
   const seen = state.seenTypes || {};
-  if (seen.coal || seen.iron || seen.gold || seen.crystal) unlockAchievement('layer_ore');
+  if (seen.coal || seen.copper || seen.iron || seen.gold || seen.crystal) {
+    unlockAchievement('layer_ore');
+  }
   if (seen.shell || seen.seal || seen.core) unlockAchievement('layer_shell');
   // Lava milestone can fire on fog reveal; aquifer/gas wait for a real breach
   if (seen.lava) unlockAchievement('biome_lava');
@@ -801,9 +861,13 @@ function checkDepthAchievements() {
 function fireRevealTutorials() {
   if (!state) return;
   const seen = state.seenTypes || {};
-  if ((seen.coal || seen.iron || seen.gold || seen.crystal) && showTutorial('smelter_ore')) {
+  if (
+    (seen.coal || seen.copper || seen.iron || seen.gold || seen.crystal) &&
+    showTutorial('smelter_ore')
+  ) {
     return;
   }
+  if (seen.copper && showTutorial('copper_tip')) return;
   if (seen.aquifer && showTutorial('aquifer_tip')) return;
   if (seen.gas && showTutorial('gas_tip')) return;
   if (seen.lava && showTutorial('lava_tip')) return;
@@ -1076,8 +1140,12 @@ function serialize() {
       resting: !!w.resting,
       digFilter: w.digFilter || 'auto',
       digHeading: w.digHeading || 'down',
+      digStance: w.digStance || 'work',
       shackUid: w.shackUid || null,
       job: w.job,
+      digResume: w.digResume
+        ? { x: w.digResume.x | 0, y: w.digResume.y | 0 }
+        : undefined,
     })),
     buildings: state.buildings.map((b) => ({
       uid: b.uid,
@@ -1085,6 +1153,7 @@ function serialize() {
       x: b.x,
       y: b.y,
       t: b.t,
+      recipeMode: b.recipeMode || undefined,
       paidCost: b.paidCost || undefined,
     })),
     monsters: (state.monsters || []).map((m) => ({
@@ -1175,8 +1244,13 @@ function hydrate(data) {
       resting: !!w.resting,
       digFilter: w.digFilter || 'auto',
       digHeading: w.digHeading || 'down',
+      digStance: w.digStance || 'work',
       shackUid: w.shackUid || null,
       job: w.job || null,
+      digResume:
+        w.digResume && typeof w.digResume.x === 'number'
+          ? { x: w.digResume.x | 0, y: w.digResume.y | 0 }
+          : null,
       jobBlocked: false,
       cooldown: 0,
     })),
@@ -1186,6 +1260,7 @@ function hydrate(data) {
       x: b.x,
       y: b.y,
       t: b.t || 0,
+      recipeMode: b.recipeMode || 'auto',
       def: BUILDINGS[b.id],
       paidCost:
         b.paidCost && typeof b.paidCost === 'object' ? { ...b.paidCost } : undefined,
@@ -1238,8 +1313,8 @@ function hydrate(data) {
   const padY = sy - 1;
   for (const b of state.buildings) {
     if (isSurfaceCamp(b.id) && b.y === sy) b.y = padY;
-    // Pre-surface smelters sat in the shaft — lift onto sky pad when the column is free
-    if (b.id === 'smelter' && b.y !== padY) {
+    // Pre-surface smelters/refineries sat in the shaft — lift onto sky pad when free
+    if ((b.id === 'smelter' || b.id === 'refinery') && b.y !== padY) {
       const pad = tileAt(state.world, b.x, padY);
       const blocked = state.buildings.some(
         (o) => o !== b && o.x === b.x && (o.y === padY || o.y === sy)
@@ -1456,8 +1531,15 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   checkDepthAchievements();
   // Ore tip from breaking; ambient reveal tips if no beat tip fired
   let tipped = false;
-  if (was === 'iron' || was === 'gold' || was === 'coal' || was === 'crystal') {
+  if (
+    was === 'iron' ||
+    was === 'gold' ||
+    was === 'coal' ||
+    was === 'copper' ||
+    was === 'crystal'
+  ) {
     tipped = showTutorial('smelter_ore');
+    if (was === 'copper') showTutorial('copper_tip');
   }
   if (!tipped) fireRevealTutorials();
   return true;
@@ -1589,8 +1671,10 @@ function placeWorker(tx, ty) {
     resting: false,
     digFilter: 'auto',
     digHeading: 'down',
+    digStance: 'work',
     shackUid: null,
     job: null,
+    digResume: null,
     jobBlocked: false,
     cooldown: 0,
   });
@@ -1703,6 +1787,7 @@ function isSurfaceCamp(id) {
   return (
     id === 'grove' ||
     id === 'smelter' ||
+    id === 'refinery' ||
     id === 'market' ||
     id === 'cottage' ||
     id === 'stall'
@@ -1796,11 +1881,14 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
     paidCost && typeof paidCost === 'object' && Object.keys(paidCost).length
       ? { ...paidCost }
       : undefined;
-  state.buildings.push({ uid, id, x: tx, y: ty, t: 0, def, paidCost: paid });
+  const placed = { uid, id, x: tx, y: ty, t: 0, def, paidCost: paid };
+  if (id === 'smelter' || id === 'refinery') placed.recipeMode = 'auto';
+  state.buildings.push(placed);
   sfx.place();
   selectedBuildingUid = uid;
   selectedWorkerId = null;
   flashBuildingRadius(uid, 2.8);
+  if (id === 'smelter' || id === 'refinery') setDockPanel('build');
   // Sticky place while selected; starter-only caps still clear the tool
   if (id === 'listening') {
     tool = buildingAtCap(id) ? null : tool;
@@ -1828,6 +1916,8 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
     );
   }
   if (id === 'grove') showTutorial('hire_digger');
+  if (id === 'smelter') showTutorial('smelter_ore');
+  if (id === 'refinery') showTutorial('refinery_tip');
   renderUi();
 }
 
@@ -1867,7 +1957,7 @@ function markersForBuilding(b, alpha) {
     out.push({
       x: b.x,
       y: b.y,
-      radius: cfg.radius,
+      radius: buildingOverlayRadius(b.id) || cfg.radius,
       alpha,
       tint: cfg.tint,
       mode: 'diamond',
@@ -1886,12 +1976,13 @@ function describeBuildingRange(b) {
   }
   const cfg = BUILDING_OVERLAY[b.id];
   if (!cfg) return null;
-  if (b.id === 'mine') return `bore r${cfg.radius}`;
+  const r = buildingOverlayRadius(b.id) || cfg.radius;
+  if (b.id === 'mine') return `bore r${r}`;
   if (b.id === 'grove') return `plant ±${cfg.span} on sky pad`;
-  if (b.id === 'chapel') return `heal vitality r${cfg.radius}`;
-  if (b.id === 'pump') return `keep dry r${cfg.radius}`;
-  if (b.id === 'ward') return `banish horrors r${cfg.radius}`;
-  return `r${cfg.radius}`;
+  if (b.id === 'chapel') return `heal vitality r${r}`;
+  if (b.id === 'pump') return `keep dry r${r}`;
+  if (b.id === 'ward') return `banish horrors r${r}`;
+  return `r${r}`;
 }
 
 /**
@@ -1907,8 +1998,12 @@ function placementPreviewMarkers() {
   return markersForBuilding({ id: tool, x, y, uid: '__place__' }, 0.72);
 }
 
-/** Always-on faint pump dry radius (hover/select/flash can brighten). */
-const PUMP_OVERLAY_IDLE_ALPHA = 0.28;
+/** Always-on pump dry radius (hover/select/flash can brighten). */
+const PUMP_OVERLAY_IDLE_ALPHA = 0.42;
+/** Stronger diamond when floodwater is nearby so the dry ring reads in wet shafts. */
+const PUMP_OVERLAY_WET_ALPHA = 0.72;
+/** Chugging pumps get a clear pulsing dry pocket. */
+const PUMP_OVERLAY_WORKING_ALPHA = 0.88;
 
 /** Buildings that should show range overlays this frame. */
 function buildingRadiusMarkers() {
@@ -1923,9 +2018,14 @@ function buildingRadiusMarkers() {
     if (!prev || alpha > prev.alpha) picked.set(b.uid, { b, alpha });
   };
 
-  // Pump cover stays faintly visible so dry pockets are always readable
+  // Pump cover stays visible so dry pockets are always readable (brighter when wet)
+  const floodNearby = (state.floodDepth || 0) > 0.15;
   for (const b of state.buildings) {
-    if (b.id === 'pump') add(b, PUMP_OVERLAY_IDLE_ALPHA);
+    if (b.id !== 'pump') continue;
+    let a = PUMP_OVERLAY_IDLE_ALPHA;
+    if (b.pumpWorking) a = PUMP_OVERLAY_WORKING_ALPHA;
+    else if (floodNearby) a = PUMP_OVERLAY_WET_ALPHA;
+    add(b, a);
   }
 
   if (hover) {
@@ -2159,6 +2259,7 @@ function relocateWorker(w, tx, ty) {
   w.job = null;
   w.jobBlocked = false;
   w.resting = false;
+  w.digResume = null;
   w.cooldown = 0;
   selectedWorkerId = w.uid;
   selectedBuildingUid = null;
@@ -2227,17 +2328,19 @@ function syncFloodDepthFromCols() {
 }
 
 function pumpCoversTile(tx, ty, pumpList) {
+  const r = effectivePumpRadius();
   for (const p of pumpList) {
-    if (Math.abs(p.x - tx) + Math.abs(p.y - ty) <= PUMP_RADIUS) return true;
+    if (Math.abs(p.x - tx) + Math.abs(p.y - ty) <= r) return true;
   }
   return false;
 }
 
 /** True if any placed pump covers (tx, ty) — no list alloc. */
 function anyPumpCoversTile(tx, ty) {
+  const r = effectivePumpRadius();
   for (const b of state.buildings) {
     if (b.id !== 'pump') continue;
-    if (Math.abs(b.x - tx) + Math.abs(b.y - ty) <= PUMP_RADIUS) return true;
+    if (Math.abs(b.x - tx) + Math.abs(b.y - ty) <= r) return true;
   }
   return false;
 }
@@ -2285,17 +2388,19 @@ function stepFloodBasins(dt, raining) {
   for (let i = 0; i < basins.length; i++) {
     const b = basins[i];
     const covering = [];
+    const pumpR = effectivePumpRadius();
     for (const p of pumpList) {
       let covers = false;
       for (const c of b.cells) {
-        if (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) <= PUMP_RADIUS) {
+        if (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) <= pumpR) {
           covers = true;
           break;
         }
       }
       if (covers) covering.push(p);
     }
-    // Stack drain per covering pump (was +once total — multi-pump basins barely moved).
+    // Stack drain per covering pump. Coverage is Manhattan radius to any basin
+    // cell — pumps keep draining while submerged (no "must be dry" gate).
     let drain = baseDrain;
     if (covering.length) drain += WEATHER.FLOOD_DRAIN_PER_PUMP * covering.length;
 
@@ -2317,15 +2422,15 @@ function stepFloodBasins(dt, raining) {
 
   // Write continuous volume back into floodCols. Wet mask uses floor(vol) only —
   // without keeping the fractional remainder, rain (≪ 1 tile/tick) never accumulates.
-  // Gravity: fill deepest basin cells first (including pump reach) so water never
-  // floats above emptied shaft — pumps drain volume; diggers stay dry via isTileFlooded.
+  // Gravity: fill deepest cells outside pump reach first. Pump-covered tiles stay
+  // off the wet mask (dry pocket) while volume still drains — diggers and visuals agree.
   cols.fill(0);
   for (let i = 0; i < basins.length; i++) {
     const b = basins[i];
     const vol = volumes[i];
     if (vol <= 0) continue;
 
-    const fillable = b.cells.slice();
+    const fillable = b.cells.filter((c) => !pumpCoversTile(c.x, c.y, pumpList));
     fillable.sort((a, b2) => b2.y - a.y || a.x - b2.x);
 
     const n =
@@ -2336,6 +2441,8 @@ function stepFloodBasins(dt, raining) {
       cols[c.x] += 1;
     }
 
+    // Remainder (incl. volume that would sit under pumps) stays in floodCols so
+    // drain keeps removing it even when the dry pocket looks empty.
     const rem = vol - n;
     if (rem > 1e-6) {
       const rx =
@@ -2507,6 +2614,42 @@ function killWorker(w, reason) {
   lastShopSig = '';
 }
 
+/** Remember where this digger was working before they went to rest. */
+function bookmarkDigResume(w) {
+  if (w.job && typeof w.job.standX === 'number') {
+    w.digResume = { x: w.job.standX | 0, y: w.job.standY | 0 };
+  } else {
+    w.digResume = { x: Math.floor(w.x), y: Math.floor(w.y) };
+  }
+}
+
+/**
+ * Walk back to digResume after resting. Returns true if still traveling
+ * (caller should skip pickJob this frame).
+ */
+function stepReturnToDigResume(w, speed, dt) {
+  if (!w.digResume) return false;
+  let tx = w.digResume.x | 0;
+  let ty = w.digResume.y | 0;
+  if (!isWalkable(state.world, tx, ty) || isTileFlooded(tx, ty)) {
+    const near = nearestDryWalkable(tx, ty, 24);
+    if (!near) {
+      w.digResume = null;
+      return false;
+    }
+    tx = near.x;
+    ty = near.y;
+    w.digResume = { x: tx, y: ty };
+  }
+  const d = Math.hypot(tx + 0.5 - w.x, ty + 0.5 - w.y);
+  if (d < 0.55) {
+    w.digResume = null;
+    return false;
+  }
+  moveWorkerAlongShaft(w, tx, ty, speed, dt);
+  return true;
+}
+
 function stepWorkers(dt) {
   const speed = workerSpeed(state) * 2.6;
   const maxE = workerMaxEnergy(state);
@@ -2562,8 +2705,25 @@ function stepWorkers(dt) {
       }
     }
 
+    // Flee stance: drop job and run toward rest when a horror closes in
+    if ((w.digStance || 'work') === 'flee' && !w.resting) {
+      const horrorNear = (state.monsters || []).some(
+        (m) => Math.hypot(w.x - m.x, w.y - m.y) <= MONSTER.fleeRange
+      );
+      if (horrorNear) {
+        w.job = null;
+        w.jobBlocked = false;
+        const flee = restTargetFor(w);
+        moveWorkerAlongShaft(w, flee.x, flee.y, speed, dt);
+        continue;
+      }
+    }
+
     // Enter rest only when fully spent; stay resting until fully recharged
-    if (w.energy <= 0) w.resting = true;
+    if (w.energy <= 0) {
+      if (!w.resting) bookmarkDigResume(w);
+      w.resting = true;
+    }
     if (w.resting) {
       w.jobBlocked = false;
       const rest = restTargetFor(w);
@@ -2594,6 +2754,9 @@ function stepWorkers(dt) {
       }
       continue;
     }
+
+    // After rest: walk back to the dig face before seeking work from camp
+    if (stepReturnToDigResume(w, speed, dt)) continue;
 
     w.cooldown = Math.max(0, w.cooldown - dt);
     if (!w.job || !jobValid(w.job)) {
@@ -2631,6 +2794,7 @@ function stepWorkers(dt) {
       }
       if (w.energy <= 0) {
         w.energy = 0;
+        bookmarkDigResume(w);
         w.resting = true;
         w.job = null;
         w.jobBlocked = false;
@@ -2687,12 +2851,14 @@ function stepMonsters(dt) {
   }
 
   // Ward posts burn horrors in range
+  const wardR = effectiveWardRadius();
+  const wardDps = effectiveWardDps();
   for (const b of state.buildings) {
     if (b.id !== 'ward') continue;
     for (const m of state.monsters) {
       const d = Math.abs(b.x + 0.5 - m.x) + Math.abs(b.y + 0.5 - m.y);
-      if (d <= WARD_RADIUS) {
-        m.hp -= WARD_DPS * dt;
+      if (d <= wardR) {
+        m.hp -= wardDps * dt;
         if (Math.random() < dt * 0.8) {
           fx.burst(m.x, m.y, '#c4a35a', 2);
           sfx.ward();
@@ -2746,11 +2912,21 @@ function stepMonsters(dt) {
       target.vitality = (target.vitality || 0) - MONSTER.vitalityDamage;
       fx.floatText(target.x, target.y - 0.3, `-${MONSTER.vitalityDamage}`, '#c45c4a');
       sfx.monster();
+      // Stand ground: militia diggers chip the horror when struck
+      if ((target.digStance || 'work') === 'stand') {
+        m.hp -= MONSTER.militiaDamage;
+        fx.floatText(m.x, m.y - 0.2, `-${MONSTER.militiaDamage}`, '#c4a35a');
+        if (m.hp <= 0) {
+          fx.burst(m.x, m.y, '#5a2030', 10);
+          fx.floatText(m.x, m.y, 'banished', '#c4a35a');
+        }
+      }
       if (target.vitality <= 0) {
         killWorker(target, 'A deep horror dragged a digger under.');
       }
     }
   }
+  state.monsters = state.monsters.filter((m) => m.hp > 0);
 }
 
 function moveWorkerAlongShaft(w, tx, ty, speed, dt) {
@@ -2827,8 +3003,84 @@ function pickJob(w) {
   );
 }
 
-const MINE_ORE = ['coal', 'iron', 'gold', 'crystal'];
+const MINE_ORE = ['coal', 'copper', 'iron', 'gold', 'crystal'];
 const MINE_FILLER = ['stone', 'dirt', 'grass'];
+
+function recipeAffordable(recipe) {
+  for (const [k, n] of Object.entries(recipe.inputs)) {
+    if ((state.bags[k] || 0) < n) return false;
+  }
+  return true;
+}
+
+/** Try one refining recipe against bags. Returns product key or null. */
+function tryCraftRecipe(recipe) {
+  if (!recipeAffordable(recipe)) return null;
+  for (const [k, n] of Object.entries(recipe.inputs)) {
+    state.bags[k] -= n;
+  }
+  let product = null;
+  for (const [k, n] of Object.entries(recipe.output)) {
+    state.bags[k] = (state.bags[k] || 0) + n;
+    product = k;
+  }
+  return product;
+}
+
+/** Recipes available for this smelter/refinery given recipeMode. */
+function recipesForBuilding(b, recipes) {
+  const mode = b.recipeMode || 'auto';
+  if (mode === 'auto') return recipes;
+  const one = recipes.find((r) => r.id === mode);
+  return one ? [one] : recipes;
+}
+
+/**
+ * Accumulate craft progress only while inputs are available.
+ * @param {number} dt already scaled by smeltRate
+ */
+function tickSurfaceRefiner(b, recipes, interval, dt) {
+  const list = recipesForBuilding(b, recipes);
+  const next = list.find(recipeAffordable) || null;
+  if (!next) {
+    b.t = 0;
+    b.smeltIdle = true;
+    b.smeltProduct = null;
+    b.smeltProgress = 0;
+    return;
+  }
+  b.smeltIdle = false;
+  // Preview what we're working toward (shown in inspect / progress)
+  const pendingKey = Object.keys(next.output)[0] || null;
+  b.smeltProduct = pendingKey;
+  b.t += dt;
+  b.smeltProgress = Math.min(1, b.t / interval);
+  if (b.t < interval) return;
+
+  b.t = 0;
+  b.smeltProgress = 0;
+  const product = tryCraftRecipe(next);
+  if (!product) {
+    b.smeltIdle = true;
+    b.smeltProduct = null;
+    return;
+  }
+  b.smeltProduct = product;
+  if (product === 'ironBar' || product === 'copperBar' || product === 'goldBar') {
+    unlockAchievement('first_bar');
+    showTutorial('refinery_tip');
+  }
+  if (
+    product === 'steelBar' ||
+    product === 'crystalLens' ||
+    product === 'copperWire'
+  ) {
+    showTutorial('refinery_tip');
+  }
+  sfx.buy();
+  const name = RESOURCE_META[product]?.name || product;
+  fx.floatText(b.x, b.y, `+${name}`, '#c4a35a');
+}
 /** Manhattan radius — drills bore solid tiles in this range (fog OK). Nerfed vs v2. */
 const MINE_RADIUS = 3;
 const DRILL_RADIUS = MINE_RADIUS;
@@ -2846,6 +3098,15 @@ const BUILDING_OVERLAY = {
   pump: { radius: PUMP_RADIUS, tint: 'teal', label: 'dry' },
   ward: { radius: WARD_RADIUS, tint: 'violet', label: 'ward' },
 };
+
+/** Overlay / status radius for a building type (upgrades may widen pump/ward). */
+function buildingOverlayRadius(id) {
+  if (id === 'pump') return effectivePumpRadius();
+  if (id === 'ward') return effectiveWardRadius();
+  if (id === 'mine') return DRILL_RADIUS;
+  if (id === 'chapel') return CHAPEL_RADIUS;
+  return BUILDING_OVERLAY[id]?.radius ?? 0;
+}
 
 function mineCandidates(bx, by, kinds) {
   const list = [];
@@ -2883,11 +3144,12 @@ function describeMineStatus(b) {
 
 function stepBuildings(dt) {
   const rate = buildingRate(state);
+  const drillRate = drillBoreRate(state);
   const srate = smeltRate(state);
   for (const b of state.buildings) {
-    // Smelters tick on Hotter furnace only; drills/grove use Deeper shafts
-    if (b.id === 'smelter') b.t += dt * srate;
-    else b.t += dt * rate;
+    // Drills use coils; grove uses shafts; smelters/refineries tick inside tickSurfaceRefiner
+    if (b.id === 'mine') b.t += dt * drillRate;
+    else if (b.id !== 'smelter' && b.id !== 'refinery') b.t += dt * rate;
     if (b.id === 'mine' && b.t >= 1.6) {
       b.t = 0;
       // Keep a pocket of vision around the rig so candidates stay findable
@@ -2932,31 +3194,12 @@ function stepBuildings(dt) {
         fx.floatText(x, padY, '+seed', '#6a9a5a');
       }
     }
-    // Each placed smelter refines independently → N smelters ≈ N× bars/sec
-    if (b.id === 'smelter' && b.t >= 2.4) {
-      b.t = 0;
-      if ((state.bags.iron || 0) >= 2 && (state.bags.coal || 0) >= 1) {
-        state.bags.iron -= 2;
-        state.bags.coal -= 1;
-        state.bags.ironBar = (state.bags.ironBar || 0) + 1;
-        b.smeltIdle = false;
-        b.smeltProduct = 'iron';
-        unlockAchievement('first_bar');
-        sfx.buy();
-        fx.floatText(b.x, b.y, '+bar', '#c4a35a');
-      } else if ((state.bags.gold || 0) >= 2 && (state.bags.coal || 0) >= 1) {
-        state.bags.gold -= 2;
-        state.bags.coal -= 1;
-        state.bags.goldBar = (state.bags.goldBar || 0) + 1;
-        b.smeltIdle = false;
-        b.smeltProduct = 'gold';
-        unlockAchievement('first_bar');
-        sfx.buy();
-        fx.floatText(b.x, b.y, '+bar', '#e8d48a');
-      } else {
-        b.smeltIdle = true;
-        b.smeltProduct = null;
-      }
+    // Each placed smelter / refinery refines independently (Hotter furnace scales dt)
+    if (b.id === 'smelter') {
+      tickSurfaceRefiner(b, SMELT_RECIPES, SMELT_INTERVAL, dt * srate);
+    }
+    if (b.id === 'refinery') {
+      tickSurfaceRefiner(b, REFINE_RECIPES, REFINE_INTERVAL, dt * srate);
     }
   }
 }
@@ -3053,13 +3296,18 @@ function renderUi() {
   const depth = deepestClearedTowardCore(state.world);
   els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
   els.depth.textContent = `${Math.floor(depth * 100)}%`;
+  const layer = digLayerAt(depth);
+  if (els.layer) {
+    els.layer.textContent = layer.name;
+    els.layer.title = `Dig chapter: ${layer.name}`;
+  }
   const senseTier = echoSenseTier(state);
   const depthMeter = els.depth?.closest?.('.meter.depth');
   if (depthMeter) {
     depthMeter.title =
       senseTier > 0
-        ? `Depth toward core · Echo Sense ${senseTier}: ${echoSenseCardinal()}`
-        : 'Distance to core';
+        ? `${layer.name} · Depth toward core · Echo Sense ${senseTier}: ${echoSenseCardinal()}`
+        : `${layer.name} · Distance to core`;
   }
   if (els.depthSense) {
     if (senseTier > 0) {
@@ -3074,7 +3322,17 @@ function renderUi() {
   els.bags.innerHTML = '';
   for (const [k, meta] of Object.entries(RESOURCE_META)) {
     const n = state.bags[k] || 0;
-    if (!n && k !== 'wood' && k !== 'stone' && k !== 'ironBar') continue;
+    if (
+      !n &&
+      k !== 'wood' &&
+      k !== 'stone' &&
+      k !== 'ironBar' &&
+      k !== 'copperBar' &&
+      k !== 'steelBar' &&
+      k !== 'copperWire'
+    ) {
+      continue;
+    }
     const li = document.createElement('li');
     if (!n) li.classList.add('is-empty');
     const a = document.createElement('span');
@@ -3137,6 +3395,7 @@ function renderUi() {
 
   renderCrew();
   renderOrdersPanel();
+  renderBuildingOrdersPanel();
   renderMarketPanel();
 
   // Build panel: placeables + demolish (starter village stays off the list)
@@ -3147,23 +3406,31 @@ function renderUi() {
     const btn = document.createElement('button');
     btn.type = 'button';
     const placeCost = nextBuildingCost(b.id);
-    const canBuild = cheatCanAfford(placeCost);
-    const placeSelected = tool === b.id;
+    const atCap = buildingAtCap(b.id);
+    const canBuild = !atCap && cheatCanAfford(placeCost);
+    const placeSelected = tool === b.id && !atCap;
     btn.className =
       'hot-slot' +
       (placeSelected ? ' is-active' : '') +
       (canBuild ? ' is-affordable' : ' is-locked');
-    // Temporary unaffordable stays clickable while selected (sticky)
-    btn.disabled = !canBuild && tool !== b.id;
+    // At cap is hard-locked; temporary unaffordable stays clickable while selected
+    btn.disabled = atCap || (!canBuild && tool !== b.id);
     const costHtml = formatCostHtml(placeCost);
     const ownedN = buildingCount(b.id);
     const owned = ownedN > 0 ? ` ×${ownedN}` : '';
-    const roleLine = canBuild ? costHtml || b.role || '' : costHtml;
+    const roleLine = atCap
+      ? `max ${b.max}`
+      : canBuild
+        ? costHtml || b.role || ''
+        : costHtml;
     btn.innerHTML = `<span class="slot-main"><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
     bindTip(btn, b.name, b.blurb, () => {
       const tipCost = formatCostHtml(nextBuildingCost(b.id));
       const ok = cheatCanAfford(nextBuildingCost(b.id));
       const n = buildingCount(b.id);
+      if (buildingAtCap(b.id)) {
+        return `At max (${b.max}) — no benefit from more` + (n ? ` · owned ${n}` : '');
+      }
       return (
         tipCost +
         (ok ? '' : ' · need resources') +
@@ -3172,7 +3439,14 @@ function renderUi() {
     });
     btn.addEventListener('click', () => {
       unlockAudio();
+      if (buildingAtCap(b.id)) {
+        setStatus(`${b.name} at max — cannot place more.`);
+        sfx.deny();
+        return;
+      }
       tool = b.id;
+      // Place mode — hide leftover smelter/refinery recipe strip
+      selectedBuildingUid = null;
       setDockPanel('build');
       setStatusHtml(
         `Place ${b.name} (${formatCostHtml(nextBuildingCost(b.id))}): ${b.blurb}`
@@ -3196,6 +3470,7 @@ function renderUi() {
   demoBtn.addEventListener('click', () => {
     unlockAudio();
     tool = 'demolish';
+    selectedBuildingUid = null;
     setDockPanel('build');
     setStatus('Demolish mode: click a building to remove it (50% refund).');
     renderUi();
@@ -3225,19 +3500,40 @@ function renderUi() {
     } else {
       const cost = upgradeCost(u, level);
       const barsNeed = u.needsBars ? 1 + level : 0;
+      const steelNeed = u.needsSteel ? 1 + level : 0;
+      const lensNeed = u.needsLens ? 1 + level : 0;
+      const wireNeed = u.needsWire ? 1 + level : 0;
       const haveBars = state.bags.ironBar || 0;
+      const haveSteel = state.bags.steelBar || 0;
+      const haveLens = state.bags.crystalLens || 0;
+      const haveWire = state.bags.copperWire || 0;
       const coinsOk = state.coins >= cost;
       const barsOk = !u.needsBars || haveBars >= barsNeed;
-      const affordable = coinsOk && barsOk;
+      const steelOk = !u.needsSteel || haveSteel >= steelNeed;
+      const lensOk = !u.needsLens || haveLens >= lensNeed;
+      const wireOk = !u.needsWire || haveWire >= wireNeed;
+      const affordable = coinsOk && barsOk && steelOk && lensOk && wireOk;
       row.className = 'shop-row ' + (affordable ? 'is-affordable' : 'is-locked');
       let label = `${cost}c`;
       if (u.needsBars) label += ` +${barsNeed} bar${barsNeed > 1 ? 's' : ''}`;
+      if (u.needsSteel) label += ` +${steelNeed} steel`;
+      if (u.needsLens) label += ` +${lensNeed} lens${lensNeed > 1 ? 'es' : ''}`;
+      if (u.needsWire) label += ` +${wireNeed} wire`;
       btn.textContent = label;
       if (!affordable) {
         btn.classList.add('is-locked');
         const hints = [];
         if (!coinsOk) hints.push('need coins');
         if (!barsOk) hints.push(barsNeed <= 1 ? 'need iron bar' : `need ${barsNeed} iron bars`);
+        if (!steelOk) {
+          hints.push(steelNeed <= 1 ? 'need steel bar' : `need ${steelNeed} steel bars`);
+        }
+        if (!lensOk) {
+          hints.push(lensNeed <= 1 ? 'need crystal lens' : `need ${lensNeed} crystal lenses`);
+        }
+        if (!wireOk) {
+          hints.push(wireNeed <= 1 ? 'need copper wire' : `need ${wireNeed} copper wire`);
+        }
         const hint = document.createElement('p');
         hint.className = 'shop-hint';
         hint.textContent = hints.join(' · ') || 'locked';
@@ -3381,10 +3677,10 @@ function canAffordAnyUpgrade() {
     if (level >= u.max) continue;
     const cost = upgradeCost(u, level);
     if (state.coins < cost) continue;
-    if (u.needsBars) {
-      const barsNeed = 1 + level;
-      if ((state.bags.ironBar || 0) < barsNeed) continue;
-    }
+    if (u.needsBars && (state.bags.ironBar || 0) < 1 + level) continue;
+    if (u.needsSteel && (state.bags.steelBar || 0) < 1 + level) continue;
+    if (u.needsLens && (state.bags.crystalLens || 0) < 1 + level) continue;
+    if (u.needsWire && (state.bags.copperWire || 0) < 1 + level) continue;
     return true;
   }
   return false;
@@ -3817,8 +4113,9 @@ function renderOrdersPanel() {
   const shack = w.shackUid
     ? state.buildings.find((b) => b.uid === w.shackUid)
     : null;
+  const stance = digStanceById(w.digStance || 'work');
   els.ordersHint.textContent =
-    `Selected digger · digs ${filter.label} · heads ${heading.label}` +
+    `Selected digger · digs ${filter.label} · heads ${heading.label} · ${stance.label}` +
     (w.jobBlocked && !w.resting ? ' · stuck (no reachable dig)' : '') +
     (shack ? ` · rests at shack (${shack.x},${shack.y})` : ' · rests at nearest shack / spawn');
 
@@ -3892,6 +4189,31 @@ function renderOrdersPanel() {
   headRow.append(headLabel, headGrid);
   els.orders.appendChild(headRow);
 
+  const stanceRow = document.createElement('div');
+  stanceRow.className = 'orders-row';
+  const stanceLabel = document.createElement('span');
+  stanceLabel.textContent = 'Stance';
+  const stanceGrid = document.createElement('div');
+  stanceGrid.className = 'filter-grid';
+  for (const s of DIG_STANCES) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className =
+      'filter-btn' + ((w.digStance || 'work') === s.id ? ' is-active' : '');
+    btn.textContent = s.label;
+    bindTip(btn, s.label, s.blurb);
+    btn.addEventListener('click', () => {
+      w.digStance = s.id;
+      setStatus(`Orders: stance ${s.label}.`);
+      sfx.buy();
+      renderUi();
+      save();
+    });
+    stanceGrid.appendChild(btn);
+  }
+  stanceRow.append(stanceLabel, stanceGrid);
+  els.orders.appendChild(stanceRow);
+
   const shackRow = document.createElement('div');
   shackRow.className = 'orders-row';
   const shackLabel = document.createElement('span');
@@ -3959,6 +4281,85 @@ function renderOrdersPanel() {
     renderUi();
   });
   els.orders.appendChild(clear);
+}
+
+function recipeModeLabel(b, recipes) {
+  const mode = b.recipeMode || 'auto';
+  if (mode === 'auto') return 'Auto';
+  return recipes.find((r) => r.id === mode)?.label || 'Auto';
+}
+
+/** Smelter / refinery recipe lock — replaces the place-hotbar while open. */
+function renderBuildingOrdersPanel() {
+  const el = els.buildingOrders;
+  if (!el) return;
+  const b = selectedBuildingUid
+    ? state.buildings.find((x) => x.uid === selectedBuildingUid)
+    : null;
+  const recipes =
+    b?.id === 'smelter' ? SMELT_RECIPES : b?.id === 'refinery' ? REFINE_RECIPES : null;
+  const configuring = !!(b && recipes);
+
+  if (els.buildPlace) els.buildPlace.classList.toggle('hidden', configuring);
+  if (els.buildPanelTitle) {
+    els.buildPanelTitle.textContent = configuring
+      ? `${(b.def || buildingDef(b.id))?.name || b.id} · recipe`
+      : 'Buildings';
+  }
+
+  if (!configuring) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  // Configuring a plant — leave place tools so map clicks stay on the building
+  tool = null;
+
+  el.classList.remove('hidden');
+  el.innerHTML = '';
+
+  const hint = document.createElement('p');
+  hint.className = 'muted';
+  hint.textContent = 'Lock what this plant crafts. Other buildings stay in the Buildings list.';
+  el.appendChild(hint);
+
+  const row = document.createElement('div');
+  row.className = 'orders-row';
+  const label = document.createElement('span');
+  label.textContent = 'Recipe';
+  const grid = document.createElement('div');
+  grid.className = 'filter-grid';
+  const modes = [{ id: 'auto', label: 'Auto', blurb: 'First craft that has inputs.' }, ...recipes];
+  const def = b.def || buildingDef(b.id);
+  for (const m of modes) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className =
+      'filter-btn' + ((b.recipeMode || 'auto') === m.id ? ' is-active' : '');
+    btn.textContent = m.label;
+    bindTip(btn, m.label, m.blurb || formatRecipeLine(m));
+    btn.addEventListener('click', () => {
+      b.recipeMode = m.id;
+      setStatus(`${def?.name || b.id}: ${m.label}.`);
+      sfx.buy();
+      renderUi();
+      save();
+    });
+    grid.appendChild(btn);
+  }
+  row.append(label, grid);
+  el.appendChild(row);
+
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'btn ghost orders-clear';
+  back.textContent = 'Back to buildings';
+  back.addEventListener('click', () => {
+    selectedBuildingUid = null;
+    renderUi();
+  });
+  el.appendChild(back);
 }
 
 function formatCostPart(k, v) {
@@ -4133,7 +4534,7 @@ function bindHelpTips() {
           warn: phase !== 'clear',
         },
         {
-          text: `Pumps (${pumps}) dry a Manhattan radius fast. Without them, floodwater seeps away very slowly once the rain stops.`,
+          text: `Pumps (${pumps}) keep draining even when submerged and dry a Manhattan radius. Without them, floodwater still seeps away after rain — much slower than with pumps.`,
           muted: true,
         },
       ];
@@ -4150,7 +4551,7 @@ function bindHelpTips() {
             : 'A village market starts at camp each dig (with cottage + side stall). It cannot be demolished or rebuilt from the hotbar.',
         },
         {
-          text: 'Bars sell for more than raw ore — place surface smelters (each adds throughput) to refine iron/gold for cash or the Iron-bound pick.',
+          text: 'Bars, wire, and lenses sell for more than raw ore. Smelters: ore+coal → bars (per-building recipe). Refineries: steel, copper wire, crystal lenses.',
         },
         {
           text:
@@ -4160,7 +4561,21 @@ function bindHelpTips() {
           muted: true,
         },
       ];
-      const samples = ['wood', 'coal', 'iron', 'ironBar', 'gold', 'goldBar', 'crystal', 'fragment']
+      const samples = [
+        'wood',
+        'coal',
+        'copper',
+        'iron',
+        'copperBar',
+        'ironBar',
+        'steelBar',
+        'copperWire',
+        'gold',
+        'goldBar',
+        'crystal',
+        'crystalLens',
+        'fragment',
+      ]
         .map((k) => {
           const p = resourceSellPrice(state, k);
           if (p <= 0) return null;
@@ -4178,9 +4593,10 @@ function bindHelpTips() {
       'Crew',
       'Click a digger row (or on the map) to focus them and open Orders.\n' +
         'Energy restores at shacks / spawn. Life (vitality) drains as they dig, in flooded shaft, and when horrors hit — chapels heal life while resting nearby.\n' +
+        'Stance: Work, Flee (run from horrors), or Stand ground (militia damage when hit).\n' +
         'Amber “stuck · no job” means their dig filter has nothing reachable they can scratch — loosen Orders or dig a path.\n' +
         'Diggers die at 0 life. Tombstones mark where they fell.\n' +
-        'Rare storms pool water from the dig floor upward — shaft pumps keep a pocket dry.'
+        'Rare storms pool water from the dig floor upward — shaft pumps keep a pocket dry (still work underwater).'
     );
   }
   if (orders) {
@@ -4192,11 +4608,11 @@ function bindHelpTips() {
           : 'Build a Listening Post for Echo Sense (vague cube bearing + pulse). Sharpen with the Echo Sense shard upgrade.';
       return [
         {
-          text: 'Dig target: what they seek. Heading: Down / Widen / Toward core. Home shack: where they rest.',
+          text: 'Dig target · Heading · Stance (Work / Flee / Stand ground) · Home shack.',
         },
         { text: senseLine },
         {
-          text: 'Toward core unlocks with Echo Sense or after fog reveals cube shell. Filters for shell / seal / core appear only after fog reveals that layer.',
+          text: 'Toward core unlocks with Echo Sense or after fog reveals cube shell. Filters for shell / seal / core appear only after fog reveals that layer. Stand ground chips horrors when hit; Flee runs to rest.',
           muted: true,
         },
       ];
@@ -4290,8 +4706,14 @@ function setDockPanel(id) {
 /** Rail / digit shortcut: open panel, or close if that panel is already active. */
 function selectDockPanel(id) {
   if (!DOCK_PANEL_IDS.includes(id)) return;
-  if (activeDockPanel === id) setDockPanel(null);
-  else setDockPanel(id);
+  if (activeDockPanel === id) {
+    setDockPanel(null);
+    return;
+  }
+  // Build rail is for placing — don't keep a leftover recipe strip from a map select
+  if (id === 'build') selectedBuildingUid = null;
+  setDockPanel(id);
+  if (id === 'build') renderBuildingOrdersPanel();
 }
 
 function bindMenuRail() {
@@ -4660,6 +5082,12 @@ function onPointerUp(e) {
       detail = `${name} — village rest hut (click with a digger selected to assign home).`;
     } else if (bld.id === 'stall') {
       detail = `${name} — part of the starting village.`;
+    } else if (bld.id === 'smelter') {
+      detail = `${name} · recipe ${recipeModeLabel(bld, SMELT_RECIPES)} — lock in Build dock.`;
+      setDockPanel('build');
+    } else if (bld.id === 'refinery') {
+      detail = `${name} · recipe ${recipeModeLabel(bld, REFINE_RECIPES)} — lock in Build dock.`;
+      setDockPanel('build');
     }
     setStatus(detail);
     sfx.place();
@@ -4750,6 +5178,7 @@ function loop(ts) {
       const depth = deepestClearedTowardCore(state.world);
       els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
       els.depth.textContent = `${Math.floor(depth * 100)}%`;
+      if (els.layer) els.layer.textContent = digLayerAt(depth).name;
       const sig = shopResourceSig();
       if (sig !== lastShopSig) {
         lastShopSig = sig;
@@ -4775,7 +5204,11 @@ function loop(ts) {
   if (senseTier > 0) {
     const coreY = state.world.cubeCy ?? state.world.centerY;
     const span = Math.max(1, coreY - state.world.surfaceY);
-    const { rx, ry } = echoSensePulseRadii(senseTier, span);
+    const { rx, ry } = echoSensePulseRadii(
+      senseTier,
+      span,
+      state.upgrades.focus_optics || 0
+    );
     echoSense = {
       tier: senseTier,
       cx: state.world.cubeCx ?? state.world.centerX,
@@ -4835,8 +5268,11 @@ function cheatSpawnWorkerFree() {
     vitality: workerMaxVitality(state),
     resting: false,
     digFilter: 'auto',
+    digHeading: 'down',
+    digStance: 'work',
     shackUid: null,
     job: null,
+    digResume: null,
     jobBlocked: false,
     cooldown: 0,
   });

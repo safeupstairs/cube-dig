@@ -25,6 +25,8 @@ const IDS = [
   'aquifer',
   'lava',
   'gas',
+  // Ores appended after biomes (save indices stay stable)
+  'copper',
 ];
 
 /**
@@ -198,6 +200,15 @@ export function generateWorld(prestige = 0, seed = 42) {
     sizeMax: 14,
   });
   scatterVeins({
+    id: 'copper',
+    attempts: 52,
+    minD: 16,
+    maxD: 55,
+    soft: 12,
+    sizeMin: 4,
+    sizeMax: 9,
+  });
+  scatterVeins({
     id: 'gold',
     attempts: 58,
     minD: 38,
@@ -256,14 +267,15 @@ export function generateWorld(prestige = 0, seed = 42) {
   });
 
   // Biome pockets (replace stone only — same painter as ore veins)
+  // Aquifers are sparse — flooding is memorable, not constant
   scatterVeins({
     id: 'aquifer',
-    attempts: 55,
-    minD: 10,
-    maxD: 48,
-    soft: 8,
-    sizeMin: 5,
-    sizeMax: 12,
+    attempts: 18,
+    minD: 14,
+    maxD: 52,
+    soft: 10,
+    sizeMin: 4,
+    sizeMax: 9,
   });
   scatterVeins({
     id: 'gas',

@@ -1,4 +1,4 @@
-/** @typedef {'empty'|'sky'|'grass'|'dirt'|'stone'|'coal'|'iron'|'gold'|'crystal'|'shell'|'seal'|'core'|'tree'} TileId */
+/** @typedef {'empty'|'sky'|'grass'|'dirt'|'stone'|'coal'|'iron'|'gold'|'crystal'|'shell'|'seal'|'core'|'tree'|'aquifer'|'lava'|'gas'|'copper'} TileId */
 
 /**
  * Side-view map: width × depth (y grows downward).
@@ -95,6 +95,17 @@ export const TILES = {
     coins: 0,
     hazard: 'blast',
   },
+  // Appended ore — keep IDS order stable in world.js
+  copper: {
+    name: 'Copper ore',
+    color: '#b07040',
+    edge: '#6a3a18',
+    hi: '#e0a060',
+    diggable: true,
+    hardness: 17,
+    drops: { copper: 1 },
+    coins: 0,
+  },
 };
 
 /** Dig-hazard tuning for aquifer / lava / gas biomes. */
@@ -118,19 +129,106 @@ export const RESOURCE_META = {
   dirt: { name: 'Dirt', sell: 0 },
   stone: { name: 'Stone', sell: 1 },
   coal: { name: 'Coal', sell: 3 },
+  copper: { name: 'Copper ore', sell: 3 },
   iron: { name: 'Iron ore', sell: 4 },
   gold: { name: 'Gold ore', sell: 8 },
   crystal: { name: 'Crystal', sell: 12 },
   fragment: { name: 'Fragment', sell: 8 },
+  copperBar: { name: 'Copper bar', sell: 9 },
   ironBar: { name: 'Iron bar', sell: 12 },
   goldBar: { name: 'Gold bar', sell: 24 },
+  steelBar: { name: 'Steel bar', sell: 22 },
+  crystalLens: { name: 'Crystal lens', sell: 36 },
+  copperWire: { name: 'Copper wire', sell: 5 },
 };
+
+/**
+ * Surface Smelter recipes (tried in order each tick).
+ * @type {{id:string, inputs:Record<string,number>, output:Record<string,number>, label:string}[]}
+ */
+export const SMELT_RECIPES = [
+  { id: 'iron_bar', inputs: { iron: 2, coal: 1 }, output: { ironBar: 1 }, label: 'Iron bar' },
+  { id: 'copper_bar', inputs: { copper: 2, coal: 1 }, output: { copperBar: 1 }, label: 'Copper bar' },
+  { id: 'gold_bar', inputs: { gold: 2, coal: 1 }, output: { goldBar: 1 }, label: 'Gold bar' },
+];
+
+/** Seconds per craft at Hotter furnace Lv0 (smeltRate multiplies tick speed). */
+export const SMELT_INTERVAL = 7.2;
+export const REFINE_INTERVAL = 9.6;
+
+/**
+ * Surface Refinery recipes (advanced bars / lenses).
+ * @type {{id:string, inputs:Record<string,number>, output:Record<string,number>, label:string}[]}
+ */
+export const REFINE_RECIPES = [
+  {
+    id: 'steel_bar',
+    inputs: { ironBar: 1, coal: 1 },
+    output: { steelBar: 1 },
+    label: 'Steel bar',
+  },
+  {
+    id: 'copper_wire',
+    inputs: { copperBar: 1 },
+    output: { copperWire: 2 },
+    label: 'Copper wire',
+  },
+  {
+    id: 'crystal_lens',
+    inputs: { crystal: 2, coal: 1 },
+    output: { crystalLens: 1 },
+    label: 'Crystal lens',
+  },
+];
+
+/** Named dig chapters — HUD label by depth toward core (0–1). */
+export const DIG_LAYERS = [
+  { id: 'sod', name: 'Sod', maxDepth: 0.08 },
+  { id: 'crust', name: 'Crust', maxDepth: 0.2 },
+  { id: 'veins', name: 'Veins', maxDepth: 0.4 },
+  { id: 'dread', name: 'Dread', maxDepth: 0.55 },
+  { id: 'shell', name: 'Shell', maxDepth: 0.75 },
+  { id: 'seals', name: 'Seals', maxDepth: 0.92 },
+  { id: 'core', name: 'Core', maxDepth: 1 },
+];
+
+export function digLayerAt(progress) {
+  const p = Math.max(0, Math.min(1, progress || 0));
+  for (const layer of DIG_LAYERS) {
+    if (p <= layer.maxDepth) return layer;
+  }
+  return DIG_LAYERS[DIG_LAYERS.length - 1];
+}
+
+/** Crew combat stance (Orders). */
+export const DIG_STANCES = [
+  {
+    id: 'work',
+    label: 'Work',
+    blurb: 'Keep digging. Take hits if horrors close in.',
+  },
+  {
+    id: 'flee',
+    label: 'Flee',
+    blurb: 'When a horror is near, drop the job and run to rest.',
+  },
+  {
+    id: 'stand',
+    label: 'Stand ground',
+    blurb: 'Fight back when struck — diggers deal light militia damage.',
+  },
+];
+
+export function digStanceById(id) {
+  return DIG_STANCES.find((s) => s.id === id) || DIG_STANCES[0];
+}
 
 /**
  * Building roles (game design):
  * Shack   — logistics: cap + rest beacon (put deep)
  * Drill   — excavation automation (id: mine for saves)
  * Smelter — surface refining: ore→bars (gates Iron-bound pick); N smelters ≈ N× throughput
+ * Refinery — surface advanced refine: iron bars→steel, crystal→lenses
  * Grove   — plants saplings on the surface column (id: grove)
  * Market  — starter village stall: sell bag resources for coins (id: market)
  * Cottage / stall — starter village props (cottage doubles as a rest shack; no hire seats)
@@ -164,8 +262,17 @@ export const BUILDINGS = {
     role: 'Refining',
     cost: { coins: 100, stone: 12, coal: 8 },
     blurb:
-      'Must sit on top of the world (above surface blocks). Each smelter refines on its own: 2 iron + 1 coal → iron bar, or 2 gold + 1 coal → gold bar. More smelters ≈ more bars/sec. Idle until bag has stock. Each extra smelter costs more.',
+      'Must sit on top of the world. Select to lock recipe (Auto / Iron / Copper / Gold). Slow craft — unlock Hotter furnace to speed up. Progress shows above the building while working.',
     color: '#8a4030',
+  },
+  refinery: {
+    id: 'refinery',
+    name: 'Refinery',
+    role: 'Advanced refining',
+    cost: { coins: 160, stone: 16, ironBar: 2, coal: 6 },
+    blurb:
+      'Must sit on top of the world. Select to lock recipe (Auto / steel / wire / lens). Slow craft — Hotter furnace speeds refineries too. Progress shows above while working.',
+    color: '#5a6878',
   },
   grove: {
     id: 'grove',
@@ -226,9 +333,9 @@ export const BUILDINGS = {
     id: 'pump',
     name: 'Shaft pump',
     role: 'Drainage',
-    cost: { coins: 40, wood: 6, stone: 8 },
+    cost: { coins: 25, wood: 4, stone: 5 },
     blurb:
-      'Keeps open shaft tiles dry in a Manhattan radius during storms. Rain is rare — without pumps, floodwater rises and wears diggers standing in it. Each extra pump costs more.',
+      'Clears a visible dry Manhattan pocket and drains flood volume — still works when submerged. Without pumps, floodwater rises and wears diggers standing in it. Each extra pump costs more.',
     color: '#4a6a7a',
   },
   ward: {
@@ -291,9 +398,10 @@ export const UPGRADES = [
   {
     id: 'smelt_rate',
     name: 'Hotter furnace',
-    blurb: 'Each smelter refines bars faster (stacks with building more smelters).',
-    baseCost: 80,
-    max: 5,
+    blurb:
+      'Smelters and refineries craft faster (+30% speed per level). Stacks with building more plants.',
+    baseCost: 75,
+    max: 6,
   },
   {
     id: 'sell_bonus',
@@ -310,6 +418,46 @@ export const UPGRADES = [
     baseCost: 120,
     max: 6,
     needsBars: true,
+  },
+  {
+    id: 'steel_tools',
+    name: 'Steel tools',
+    blurb: '+0.9 dig strength per level. Needs steel bars from a Refinery (iron bar + coal).',
+    baseCost: 160,
+    max: 5,
+    needsSteel: true,
+  },
+  {
+    id: 'focus_optics',
+    name: 'Focus optics',
+    blurb: 'Slight Echo Sense sharpening (+pulse clarity). Needs crystal lenses from a Refinery.',
+    baseCost: 140,
+    max: 3,
+    needsLens: true,
+  },
+  {
+    id: 'pump_coil',
+    name: 'Pump coils',
+    blurb: '+1 pump dry radius per level. Needs copper wire from a Refinery.',
+    baseCost: 90,
+    max: 3,
+    needsWire: true,
+  },
+  {
+    id: 'drill_coil',
+    name: 'Drill coils',
+    blurb: '+18% drill bore rate per level. Needs copper wire from a Refinery.',
+    baseCost: 110,
+    max: 4,
+    needsWire: true,
+  },
+  {
+    id: 'bright_wards',
+    name: 'Bright wards',
+    blurb: '+ward radius and DPS. Needs crystal lenses from a Refinery.',
+    baseCost: 150,
+    max: 3,
+    needsLens: true,
   },
 ];
 
@@ -384,11 +532,13 @@ export function echoSenseTier(state) {
  * Soft pulse ellipse radii (tiles) around the cube. Shrinks as tier rises.
  * @param {number} tier
  * @param {number} span surface→core tile span
+ * @param {number} [optics=0] Focus optics upgrade levels
  */
-export function echoSensePulseRadii(tier, span) {
+export function echoSensePulseRadii(tier, span, optics = 0) {
   if (tier <= 0) return { rx: 0, ry: 0 };
-  const rx = Math.max(3, 26 - tier * 4.5);
-  const half = Math.max(0.04, 0.28 - tier * 0.05);
+  const o = Math.max(0, optics | 0);
+  const rx = Math.max(3, 26 - tier * 4.5 - o * 1.6);
+  const half = Math.max(0.04, 0.28 - tier * 0.05 - o * 0.02);
   const ry = Math.max(rx * 0.65, Math.max(1, span) * half);
   return { rx, ry };
 }
@@ -448,24 +598,24 @@ export const PUMP_RADIUS = 5;
 /**
  * Rare surface storms: long clear skies, short telegraph, then rain.
  * Flood volume pools from the deepest open shaft upward (water level rises);
- * pumps push volume down and dry local pockets.
+ * pumps push volume down and dry local pockets (work even when submerged).
  * Lightning is a rare garnish during rain — not the main death source.
  */
 export const WEATHER = {
-  CLEAR_MIN: 280,
-  CLEAR_MAX: 320,
-  WARN_SEC: 14,
-  RAIN_MIN: 42,
-  RAIN_MAX: 68,
-  FLOOD_RISE_PER_SEC: 0.11,
+  CLEAR_MIN: 420,
+  CLEAR_MAX: 540,
+  WARN_SEC: 22,
+  RAIN_MIN: 22,
+  RAIN_MAX: 36,
+  FLOOD_RISE_PER_SEC: 0.07,
   FLOOD_MAX: 16,
-  /** Per pump covering a basin — must beat ~1 sky-col of rain so one pump visibly works. */
-  FLOOD_DRAIN_PER_PUMP: 0.25,
+  /** Per pump covering a basin — beats several sky-cols of rain so one pump visibly holds a shaft. */
+  FLOOD_DRAIN_PER_PUMP: 0.55,
   /**
    * Natural seepage while skies are clear/warning (not during rain) — tile-equivalents / sec
-   * per basin. ~1 tile / minute so floods linger without pumps but do eventually dry.
+   * per basin. ~5 tiles / minute so leftover floods clear between storms without pumps.
    */
-  FLOOD_CLEAR_DRAIN: 0.015,
+  FLOOD_CLEAR_DRAIN: 0.08,
   /** Standing in flood outside pump cover — high enough that lingering kills, fleeing can save. */
   WET_VITALITY_PER_SEC: 3.5,
   LIGHTNING_CHECK_SEC: 9,
@@ -488,6 +638,10 @@ export const MONSTER = {
   attackCooldown: 1.35,
   vitalityDamage: 7,
   spawnInterval: 9,
+  /** Militia diggers (Stand ground) chip this much HP when struck. */
+  militiaDamage: 2.2,
+  /** Flee stance: drop job when horror is within this tile distance. */
+  fleeRange: 4.5,
 };
 
 /** Dig filters for crew orders. */
@@ -498,6 +652,7 @@ export const MONSTER = {
 export const SEEN_DIG_TYPES = [
   'stone',
   'coal',
+  'copper',
   'iron',
   'gold',
   'crystal',
@@ -528,6 +683,14 @@ export const DIG_FILTERS = [
     match: ['coal'],
     blurb: 'Hunt coal seams.',
     requireSeen: 'coal',
+  },
+  {
+    id: 'copper',
+    label: 'Copper',
+    short: 'U',
+    match: ['copper'],
+    blurb: 'Hunt copper for smelting.',
+    requireSeen: 'copper',
   },
   {
     id: 'iron',
@@ -565,9 +728,9 @@ export const DIG_FILTERS = [
     id: 'ore',
     label: 'Any ore',
     short: 'O',
-    match: ['coal', 'iron', 'gold', 'crystal'],
+    match: ['coal', 'copper', 'iron', 'gold', 'crystal'],
     blurb: 'Any ore they can scratch.',
-    requireSeenAny: ['coal', 'iron', 'gold', 'crystal'],
+    requireSeenAny: ['coal', 'copper', 'iron', 'gold', 'crystal'],
   },
   {
     id: 'shell',
@@ -804,7 +967,17 @@ export const TUTORIAL_TIPS = [
   {
     id: 'smelter_ore',
     title: 'Ore & smelters',
-    text: 'Ore! Place a Smelter on the surface to refine iron/gold into bars — bars sell for more and unlock Iron-bound pick.',
+    text: 'Ore! Place a Smelter on the surface (Build). 2 ore + 1 coal → bars (iron, copper, or gold). Bars sell for more and unlock Iron-bound pick.',
+  },
+  {
+    id: 'copper_tip',
+    title: 'Copper',
+    text: 'Copper ore — smelt with coal into copper bars at a Smelter. Bars sell better than raw ore.',
+  },
+  {
+    id: 'refinery_tip',
+    title: 'Refinery',
+    text: 'Got bars? Place a Refinery on the surface: iron bar + coal → steel (Steel tools upgrade), crystal + coal → lenses (Focus optics / big market sales).',
   },
   {
     id: 'aquifer_tip',
@@ -831,6 +1004,102 @@ export const TUTORIAL_TIPS = [
 export function tutorialById(id) {
   return TUTORIAL_TIPS.find((t) => t.id === id) || null;
 }
+
+/** Format recipe inputs/outputs for wiki / tips using RESOURCE_META names. */
+export function formatRecipeLine(recipe) {
+  const inParts = Object.entries(recipe.inputs).map(
+    ([k, n]) => `${n} ${RESOURCE_META[k]?.name || k}`
+  );
+  const outParts = Object.entries(recipe.output).map(
+    ([k, n]) => `${n} ${RESOURCE_META[k]?.name || k}`
+  );
+  return `${inParts.join(' + ')} → ${outParts.join(', ')}`;
+}
+
+/**
+ * Field-guide overview copy for the standalone wiki (`/wiki`).
+ * Keep in sync when systems change — the wiki also auto-lists tiles/items/buildings
+ * from the live tables below; these sections are the prose introductions.
+ */
+export const WIKI_SECTIONS = [
+  {
+    id: 'overview',
+    title: 'How to dig',
+    paragraphs: [
+      'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
+      'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
+      'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Hard reset clears everything including tips.',
+      'Drag diggers on the map to reposition them. After resting they return to their last dig stand.',
+    ],
+  },
+  {
+    id: 'resources',
+    title: 'Resources',
+    paragraphs: [
+      'Bags hold everything you dig or craft. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
+      'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick). Cube shell drops fragments; seals and the core drop ◆.',
+      'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
+      'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
+    ],
+  },
+  {
+    id: 'smelting',
+    title: 'Smelter',
+    paragraphs: [
+      'Surface only (sky pad above the dirt). Click a placed smelter to lock its recipe: Auto, Iron, Copper, or Gold. Specialize multiple smelters.',
+      'Crafts are slow by default (~7s per bar). A progress bar appears above the building while it works. Hotter furnace speeds every smelter and refinery.',
+      ...SMELT_RECIPES.map((r) => formatRecipeLine(r)),
+      'Iron bars unlock the Iron-bound pick upgrade.',
+    ],
+  },
+  {
+    id: 'refining',
+    title: 'Refinery',
+    paragraphs: [
+      'Surface advanced plant. Costs iron bars to build. Click to lock recipe: Auto, Steel, Copper wire, or Crystal lens.',
+      'Even slower than smelting (~10s). Same Hotter furnace upgrade. Progress bar shows while refining.',
+      ...REFINE_RECIPES.map((r) => formatRecipeLine(r)),
+      'Steel → Steel tools. Copper wire → Pump coils / Drill coils. Crystal lenses → Focus optics / Bright wards (and sell well).',
+    ],
+  },
+  {
+    id: 'crew',
+    title: 'Crew & orders',
+    paragraphs: [
+      'Hire diggers in Crew. Dig filters, headings (Down / Widen / Toward core), home shack, and combat stance.',
+      'Stance: Work (default), Flee (run to rest when a horror closes in), Stand ground (militia diggers chip horror HP when hit).',
+      'Rest restores energy at shacks/cottage; chapels heal vitality. Pumps keep flood pockets dry. Ward posts burn deep horrors — Bright wards boost radius and DPS.',
+    ],
+  },
+  {
+    id: 'combat',
+    title: 'Horrors & wards',
+    paragraphs: [
+      'Deep horrors spawn near the cube once you dig far enough. They hunt diggers and drain vitality.',
+      'Ward posts deal continuous damage in a radius. Bright wards (crystal lenses) extend and strengthen them.',
+      'This is not free-aim combat — route with wards, choose crew stance, and keep chapels ready.',
+    ],
+  },
+  {
+    id: 'hazards',
+    title: 'Weather & biomes',
+    paragraphs: [
+      'Rare storms flood connected shafts from the bottom. Shaft pumps drain volume (even when submerged) and keep diggers dry in a Manhattan radius; Pump coils (copper wire) widen that radius.',
+      'Aquifers dump water when breached; lava burns diggers beside it; gas pockets explode when cracked.',
+    ],
+  },
+  {
+    id: 'layers',
+    title: 'Named layers',
+    paragraphs: [
+      ...DIG_LAYERS.map(
+        (l) =>
+          `${l.name} — about ${Math.round(l.maxDepth * 100)}% depth toward the core (cumulative ceiling).`
+      ),
+      'Use the HUD name as a chapter cue while you chase ores, storms, sense, seals, and the core.',
+    ],
+  },
+];
 
 export const ENDING_TEXT = `Beneath the last seal there is no machine, no prize vault, no company memo.
 

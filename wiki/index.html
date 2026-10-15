@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Cube Dig Wiki</title>
+    <link rel="stylesheet" href="wiki.css" />
+  </head>
+  <body>
+    <div class="wiki-shell">
+      <header class="wiki-top">
+        <a class="wiki-brand" href="#/">
+          <span class="wiki-brand-mark" aria-hidden="true"></span>
+          <span>
+            <strong>The Cube Dig</strong>
+            <em>Field guide</em>
+          </span>
+        </a>
+        <form class="wiki-search" id="wiki-search" role="search">
+          <label class="sr-only" for="wiki-q">Search</label>
+          <input id="wiki-q" type="search" placeholder="Search tiles, items, buildings…" autocomplete="off" />
+        </form>
+        <a class="wiki-play" href="../" title="Back to the dig">Play</a>
+      </header>
+
+      <div class="wiki-layout">
+        <nav class="wiki-nav" id="wiki-nav" aria-label="Wiki"></nav>
+        <main class="wiki-main" id="wiki-main" tabindex="-1"></main>
+      </div>
+
+      <footer class="wiki-foot">
+        <p>
+          Live data from the game — recipes and stats stay in sync with
+          <code>js/data.js</code>.
+        </p>
+      </footer>
+    </div>
+    <script type="module" src="wiki.js"></script>
+  </body>
+</html>

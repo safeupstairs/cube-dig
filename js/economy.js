@@ -18,12 +18,17 @@ export function blankBags() {
     dirt: 0,
     stone: 0,
     coal: 0,
+    copper: 0,
     iron: 0,
     gold: 0,
     crystal: 0,
     fragment: 0,
+    copperBar: 0,
     ironBar: 0,
     goldBar: 0,
+    steelBar: 0,
+    crystalLens: 0,
+    copperWire: 0,
   };
 }
 
@@ -38,8 +43,9 @@ export function blankShardUpgrades() {
 export function digPower(state) {
   const u = state.upgrades.click_power || 0;
   const p = state.shardUpgrades.perm_dig || 0;
-  // Soft early curve: run upgrades +0.75, shards +0.5
-  return 1 + u * 0.75 + p * 0.5;
+  const steel = state.upgrades.steel_tools || 0;
+  // Soft early curve: run upgrades +0.75, shards +0.5, steel tools +0.9
+  return 1 + u * 0.75 + p * 0.5 + steel * 0.9;
 }
 
 export function maxHardness(state) {
@@ -63,6 +69,7 @@ export function canScratchTile(state, tileId) {
     tileId === 'tree' ||
     tileId === 'stone' ||
     tileId === 'coal' ||
+    tileId === 'copper' ||
     tileId === 'iron' ||
     tileId === 'aquifer' ||
     tileId === 'lava' ||
@@ -108,8 +115,13 @@ export function buildingRate(state) {
   return 1 + (state.upgrades.mine_rate || 0) * 0.2;
 }
 
+/** Drill bore rate (Deeper shafts × Drill coils). */
+export function drillBoreRate(state) {
+  return buildingRate(state) * (1 + (state.upgrades.drill_coil || 0) * 0.18);
+}
+
 export function smeltRate(state) {
-  return 1 + (state.upgrades.smelt_rate || 0) * 0.25;
+  return 1 + (state.upgrades.smelt_rate || 0) * 0.3;
 }
 
 export function coinMult(state) {
@@ -214,10 +226,22 @@ export function tryBuyUpgrade(state, id) {
   if (u.needsBars && (state.bags.ironBar || 0) < 1 + level) {
     return `Needs ${1 + level} iron bars.`;
   }
+  if (u.needsSteel && (state.bags.steelBar || 0) < 1 + level) {
+    return `Needs ${1 + level} steel bars.`;
+  }
+  if (u.needsLens && (state.bags.crystalLens || 0) < 1 + level) {
+    return `Needs ${1 + level} crystal lenses.`;
+  }
+  if (u.needsWire && (state.bags.copperWire || 0) < 1 + level) {
+    return `Needs ${1 + level} copper wire.`;
+  }
   const cost = upgradeCost(u, level);
   if (state.coins < cost) return 'Not enough coins.';
   state.coins -= cost;
   if (u.needsBars) state.bags.ironBar -= 1 + level;
+  if (u.needsSteel) state.bags.steelBar -= 1 + level;
+  if (u.needsLens) state.bags.crystalLens -= 1 + level;
+  if (u.needsWire) state.bags.copperWire -= 1 + level;
   state.upgrades[id] = level + 1;
   return null;
 }

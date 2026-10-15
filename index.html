@@ -40,6 +40,7 @@
               <b id="depth-sense" class="depth-sense hidden" title="Echo Sense"></b>
             </div>
             <strong id="stat-depth">—</strong>
+            <span id="stat-layer" class="layer-name muted" title="Dig chapter"></span>
           </div>
           <div class="meter weather-meter" id="weather-meter" title="Surface weather — storms are rare">
             <span class="label">Sky</span>
@@ -63,10 +64,13 @@
         </div>
         <aside class="dock is-closed" id="dock">
           <section class="panel" data-panel="build" id="panel-build" hidden>
-            <h2 class="panel-title panel-head">Buildings</h2>
+            <h2 class="panel-title panel-head" id="build-panel-title">Buildings</h2>
             <div class="panel-body">
-              <p class="muted">Pick a building, then click the map to place. Demolish refunds 50%.</p>
-              <div id="hotbar" class="build-grid"></div>
+              <div id="building-orders" class="building-orders hidden"></div>
+              <div id="build-place" class="build-place">
+                <p class="muted">Pick a building, then click the map to place. Demolish refunds 50%.</p>
+                <div id="hotbar" class="build-grid"></div>
+              </div>
             </div>
           </section>
 
@@ -119,6 +123,7 @@
               <h3 class="panel-subtitle">Milestones</h3>
               <div id="achievements" class="achievements-list" aria-label="Milestones"></div>
               <div class="panel-section help-actions">
+                <a id="wiki-btn" class="btn ghost" href="wiki/" target="_blank" rel="noopener noreferrer">Wiki</a>
                 <button type="button" id="intro-btn" class="btn ghost">How to play</button>
                 <button type="button" id="reset-btn" class="btn ghost">Hard reset</button>
               </div>
