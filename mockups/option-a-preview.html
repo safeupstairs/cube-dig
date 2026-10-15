@@ -186,7 +186,7 @@
   <body>
     <div id="app" class="mock-a">
       <div class="mock-banner">
-        Option A — <span>bags always on top · Build holds place + Demolish · Hire in Crew · no Bags rail</span>
+        Option A — <span>bags on top · Build + Demolish · Hire in Crew · dig is default (right-click) · no Tools rail</span>
       </div>
 
       <header class="hud-top">
@@ -349,11 +349,10 @@
             </div>
           </section>
 
-          <section class="panel panel-switch" data-panel="tools" id="panel-tools">
-            <h2 class="panel-title panel-head">Tools</h2>
+          <section class="panel panel-switch" data-panel="stub" id="panel-stub">
+            <h2 class="panel-title panel-head">Stub</h2>
             <div class="panel-body">
-              <p class="muted">Map tool — Dig / chop is the default when you’re not placing or demolishing.</p>
-              <button type="button" class="btn is-ready" style="width: 100%">Dig / chop</button>
+              <p class="muted">Preview stub.</p>
             </div>
           </section>
         </aside>
@@ -366,27 +365,22 @@
           <span class="slot-role">place</span>
         </button>
         <button type="button" class="hot-slot" data-open="market">
-          <span class="slot-key">M</span>
+          <span class="slot-key">2</span>
           <span class="slot-name">Market</span>
           <span class="slot-role">sell</span>
         </button>
-        <button type="button" class="hot-slot" data-open="tools">
-          <span class="slot-key">T</span>
-          <span class="slot-name">Tools</span>
-          <span class="slot-role">dig</span>
-        </button>
         <button type="button" class="hot-slot" data-open="crew">
-          <span class="slot-key">C</span>
+          <span class="slot-key">3</span>
           <span class="slot-name">Crew</span>
           <span class="slot-role">hire</span>
         </button>
         <button type="button" class="hot-slot" data-open="upgrades">
-          <span class="slot-key">U</span>
+          <span class="slot-key">4</span>
           <span class="slot-name">Upgrades</span>
           <span class="slot-role">shop</span>
         </button>
         <button type="button" class="hot-slot" data-open="prestige">
-          <span class="slot-key">P</span>
+          <span class="slot-key">5</span>
           <span class="slot-name">Prestige</span>
           <span class="slot-role">shards</span>
         </button>
@@ -407,15 +401,14 @@
             if (on) shown = true;
           });
           if (!shown) {
-            // stub for upgrades/prestige in preview
-            const stub = document.getElementById('panel-tools');
+            const stub = document.getElementById('panel-stub');
             if (stub) {
               stub.classList.add('is-on');
               stub.querySelector('.panel-head').textContent = btn.querySelector('.slot-name').textContent;
               stub.querySelector('.panel-body').innerHTML =
                 '<p class="muted">Preview stub — in-game this shows ' +
                 btn.querySelector('.slot-name').textContent +
-                '.</p>';
+                '. Dig is always available; right-click cancels place/hire/demolish.</p>';
             }
           }
         });

@@ -87,7 +87,6 @@ const els = {
   bags: document.getElementById('bags'),
   market: document.getElementById('market'),
   marketHint: document.getElementById('market-hint'),
-  tools: document.getElementById('tools'),
   upgrades: document.getElementById('upgrades'),
   shardUpgrades: document.getElementById('shard-upgrades'),
   prestigeBtn: document.getElementById('prestige-btn'),
@@ -246,13 +245,55 @@ function nextBuildingCost(id) {
   return scaleBuildingCost(def.cost, buildingCount(id));
 }
 
-/** Clear place/hire/demolish so Dig / chop is active and the toolbar refreshes. */
+/** Clear place/hire/demolish so Dig / chop is active (right-click anywhere). */
 function clearToolToDig() {
-  if (tool === null) return false;
+  if (tool === null) {
+    updateWorldCursor();
+    return false;
+  }
   tool = null;
-  setStatus('Dig / chop.');
+  setStatus('Dig / chop. Right-click cancels place / hire / demolish.');
   renderUi();
+  updateWorldCursor();
   return true;
+}
+
+/**
+ * Canvas cursor for the active tool. Dig mode:
+ * tree → hatchet; dirt/grass → shovel; other diggable → pickaxe;
+ * empty shaft / sky / non-diggable → default crosshair (no pickaxe).
+ */
+function updateWorldCursor() {
+  const canvas = els.canvas;
+  if (!canvas) return;
+  canvas.classList.remove(
+    'cursor-dig-pick',
+    'cursor-dig-shovel',
+    'cursor-dig-axe',
+    'cursor-place',
+    'cursor-demolish',
+    'cursor-hire'
+  );
+  if (tool === 'demolish') {
+    canvas.classList.add('cursor-demolish');
+    return;
+  }
+  if (tool === 'worker') {
+    canvas.classList.add('cursor-hire');
+    return;
+  }
+  if (tool && BUILDINGS[tool]) {
+    canvas.classList.add('cursor-place');
+    return;
+  }
+  // Dig / chop — tool cursors only on diggable tiles; shaft/sky/empty stay crosshair
+  if (!hover || !state?.world) return;
+  const t = tileAt(state.world, hover.x, hover.y);
+  const id = t?.id;
+  if (!id || !TILES[id]?.diggable) return;
+  if (id === 'tree') canvas.classList.add('cursor-dig-axe');
+  else if (id === 'dirt' || id === 'grass') canvas.classList.add('cursor-dig-shovel');
+  else canvas.classList.add('cursor-dig-pick');
 }
 
 /**
@@ -2537,24 +2578,6 @@ function renderUi() {
     els.bags.appendChild(li);
   }
 
-  // Tools panel: dig / chop only
-  els.tools.innerHTML = '';
-  const digBtn = document.createElement('button');
-  digBtn.type = 'button';
-  digBtn.className = 'tool' + (tool === null ? ' is-active' : '');
-  digBtn.textContent = 'Dig / chop';
-  bindTip(
-    digBtn,
-    'Dig / chop',
-    'Click exposed blocks to mine. Click a digger to select them and set dig filter / home shack in Crew → Orders.'
-  );
-  digBtn.addEventListener('click', () => {
-    tool = null;
-    setDockPanel('tools');
-    renderUi();
-  });
-  els.tools.appendChild(digBtn);
-
   // Crew panel: hire worker
   if (els.crewHire) {
     els.crewHire.innerHTML = '';
@@ -2610,8 +2633,8 @@ function renderUi() {
   renderMarketPanel();
 
   // Build panel: placeables + demolish (starter village stays off the list)
+  // No slot numbers here — 1–5 are reserved for the bottom menu rail.
   els.hotbar.innerHTML = '';
-  let slotN = 1;
   for (const b of Object.values(BUILDINGS)) {
     if (!isHotbarBuilding(b)) continue;
     const btn = document.createElement('button');
@@ -2629,8 +2652,7 @@ function renderUi() {
     const ownedN = buildingCount(b.id);
     const owned = ownedN > 0 ? ` ×${ownedN}` : '';
     const roleLine = canBuild ? costHtml || b.role || '' : costHtml;
-    btn.innerHTML = `<span class="slot-main"><span class="slot-key">${slotN}</span><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
-    slotN += 1;
+    btn.innerHTML = `<span class="slot-main"><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
     bindTip(btn, b.name, b.blurb, () => {
       const tipCost = formatCostHtml(nextBuildingCost(b.id));
       const ok = cheatCanAfford(nextBuildingCost(b.id));
@@ -2658,7 +2680,7 @@ function renderUi() {
   demoBtn.className =
     'hot-slot is-danger' + (tool === 'demolish' ? ' is-active' : '');
   demoBtn.innerHTML =
-    '<span class="slot-main"><span class="slot-key">X</span><span class="slot-name">Demolish</span></span><span class="slot-role">click a building · 50% refund</span>';
+    '<span class="slot-main"><span class="slot-name">Demolish</span></span><span class="slot-role">click a building · 50% refund</span>';
   bindTip(
     demoBtn,
     'Demolish',
@@ -2802,6 +2824,8 @@ function renderUi() {
   els.prestigeBtn.classList.toggle('is-affordable', canPrestige);
   els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
   els.prestigeBtn.textContent = canPrestige ? 'Prestige — ready' : 'Prestige';
+
+  updateWorldCursor();
 }
 
 function focusWorker(w) {
@@ -3511,11 +3535,13 @@ function bindHelpTips() {
 }
 
 const DOCK_PANEL_KEY = 'cube-dig-dock-panel';
-const DOCK_PANEL_IDS = ['build', 'market', 'tools', 'crew', 'upgrades', 'prestige'];
+const DOCK_PANEL_IDS = ['build', 'market', 'crew', 'upgrades', 'prestige'];
 
 function loadDockPanel() {
   try {
     const raw = localStorage.getItem(DOCK_PANEL_KEY);
+    // Legacy Tools rail removed — dig is default; right-click cancels other tools.
+    if (raw === 'tools') return 'build';
     if (raw && DOCK_PANEL_IDS.includes(raw)) return raw;
   } catch {
     /* ignore */
@@ -3580,6 +3606,7 @@ function syncHoverFromClient(clientX, clientY) {
       hover = null;
       updateInspect();
     }
+    updateWorldCursor();
     return;
   }
   const sx = clientX - rect.left;
@@ -3587,6 +3614,7 @@ function syncHoverFromClient(clientX, clientY) {
   const wpos = renderer.screenToWorld(sx, sy);
   hover = { x: Math.floor(wpos.x), y: Math.floor(wpos.y) };
   updateInspect();
+  updateWorldCursor();
 }
 
 /** After camera pan/zoom, re-hit-test under the still pointer. */
@@ -3603,6 +3631,7 @@ function clearCanvasHover() {
   } else if (tipSource === 'world') {
     hideTip('world');
   }
+  updateWorldCursor();
 }
 
 function onPointerDown(e) {
@@ -4114,17 +4143,49 @@ function boot() {
     },
     true
   );
-  els.canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    // Backup if contextmenu still fires (some browsers); primary path is pointerdown button 2
-    clearToolToDig();
-  });
-  document.addEventListener('pointerdown', (e) => {
-    // Clicks on dock/hotbar must never be treated as canvas digs
-    if (e.target !== els.canvas && !els.canvas.contains(e.target)) {
-      canvasPress = false;
-    }
-  }, true);
+  // Right-click anywhere (except typing) → dig / chop; cancels place / hire / demolish
+  document.addEventListener(
+    'contextmenu',
+    (e) => {
+      const t = e.target;
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      clearToolToDig();
+    },
+    true
+  );
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      // Clicks on dock/hotbar must never be treated as canvas digs
+      if (e.target !== els.canvas && !els.canvas.contains(e.target)) {
+        canvasPress = false;
+      }
+      // RMB outside canvas also clears sticky tools (contextmenu may be suppressed)
+      if (e.button === 2) {
+        const t = e.target;
+        if (
+          t &&
+          (t.tagName === 'INPUT' ||
+            t.tagName === 'TEXTAREA' ||
+            t.tagName === 'SELECT' ||
+            t.isContentEditable)
+        ) {
+          return;
+        }
+        clearToolToDig();
+      }
+    },
+    true
+  );
 
   els.prestigeBtn.addEventListener('click', () => {
     unlockAudio();
@@ -4170,12 +4231,25 @@ function boot() {
       renderUi();
       return;
     }
-    // DEBUG: Backquote / F2 toggles cheat panel (ignore when typing in inputs)
-    if (e.key === '`' || e.key === 'Backquote' || e.key === 'F2') {
-      const t = e.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
+    const typing =
+      e.target &&
+      (e.target.tagName === 'INPUT' ||
+        e.target.tagName === 'TEXTAREA' ||
+        e.target.tagName === 'SELECT' ||
+        e.target.isContentEditable);
+    // Menu rail: 1…N switches dock panel (matches slot-keys / DOCK_PANEL_IDS)
+    if (!typing && /^[1-9]$/.test(e.key)) {
+      const idx = Number(e.key) - 1;
+      if (idx >= 0 && idx < DOCK_PANEL_IDS.length) {
+        e.preventDefault();
+        unlockAudio();
+        setDockPanel(DOCK_PANEL_IDS[idx]);
         return;
       }
+    }
+    // DEBUG: Backquote / F2 toggles cheat panel (ignore when typing in inputs)
+    if (e.key === '`' || e.key === 'Backquote' || e.key === 'F2') {
+      if (typing) return;
       e.preventDefault();
       toggleCheatPanel();
     }

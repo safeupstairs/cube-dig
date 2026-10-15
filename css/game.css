@@ -304,6 +304,31 @@ body {
   touch-action: none;
 }
 
+/* Dig-mode tool cursors (SVG data URIs; hotspot near tip) */
+#world.cursor-dig-pick {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath fill='%23c4a35a' stroke='%23000' stroke-width='1.2' d='M4 22 L10 12 L14 14 L8 24 Z'/%3E%3Cpath fill='%238a9098' stroke='%23000' stroke-width='1.2' d='M12 4 L24 10 L22 14 L10 8 Z'/%3E%3C/svg%3E") 6 22, crosshair;
+}
+
+#world.cursor-dig-shovel {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath fill='%23c4a35a' stroke='%23000' stroke-width='1.2' d='M12 2 L16 2 L16 16 L12 16 Z'/%3E%3Cpath fill='%236b4a32' stroke='%23000' stroke-width='1.2' d='M8 16 L20 16 L18 26 L10 26 Z'/%3E%3C/svg%3E") 14 24, crosshair;
+}
+
+#world.cursor-dig-axe {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath fill='%23c4a35a' stroke='%23000' stroke-width='1.2' d='M6 22 L14 8 L17 10 L9 24 Z'/%3E%3Cpath fill='%234a7a48' stroke='%23000' stroke-width='1.2' d='M14 4 L26 8 L24 14 L12 10 Z'/%3E%3C/svg%3E") 8 22, crosshair;
+}
+
+#world.cursor-place {
+  cursor: cell;
+}
+
+#world.cursor-demolish {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%23c45c4a' stroke-width='2.5' d='M5 5 L19 19 M19 5 L5 19'/%3E%3C/svg%3E") 12 12, not-allowed;
+}
+
+#world.cursor-hire {
+  cursor: copy;
+}
+
 .dock {
   overflow: hidden;
   min-width: 0;
