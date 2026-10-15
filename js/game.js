@@ -3745,7 +3745,9 @@ function onPointerMove(e) {
   if (dragging && lastPan) {
     const dx = e.clientX - lastPan.x;
     const dy = e.clientY - lastPan.y;
-    if (Math.hypot(dx, dy) > 4) dragMoved = true;
+    // Touch jitter is larger than mouse — keep taps as dig/place/hire
+    const thresh = e.pointerType === 'touch' ? 12 : 4;
+    if (Math.hypot(dx, dy) > thresh) dragMoved = true;
     if (dragMoved) {
       const tw = 16 * renderer.cam.zoom;
       renderer.cam.x -= dx / tw;
@@ -3785,7 +3787,10 @@ function onPointerUp(e) {
 
   // All fingers up
   const wasDrag = dragMoved;
-  const canDig = canvasPress && !wasDrag && e.button === 0;
+  // Touch pointerup reports button 0 (or occasionally -1 in older engines)
+  const primaryUp =
+    e.button === 0 || (e.pointerType === 'touch' && (e.button === -1 || e.isPrimary));
+  const canDig = canvasPress && !wasDrag && primaryUp;
   canvasPress = false;
   dragging = false;
   lastPan = null;
