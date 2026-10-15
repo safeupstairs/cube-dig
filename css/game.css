@@ -29,7 +29,7 @@
   --font: 'VT323', 'IBM Plex Mono', ui-monospace, monospace;
   --pixel: 'Press Start 2P', 'VT323', monospace;
   --mono: 'VT323', ui-monospace, monospace;
-  /* Shell: fluid stage; dock stays readable, canvas takes the rest */
+  /* Shell: fluid stage; dock overlays the canvas at a fixed readable width */
   --app-gutter: 0.75rem;
   --app-max: 1920px;
   --dock-width: clamp(280px, 18vw, 320px);
@@ -390,8 +390,10 @@ body {
 }
 
 .stage {
+  /* Single cell: canvas fills the stage; dock overlays on top */
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--dock-width);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
@@ -400,6 +402,8 @@ body {
 
 .canvas-wrap {
   position: relative;
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -444,10 +448,18 @@ body {
 }
 
 .dock {
+  /* Overlay the dig canvas — opening panels must not resize the world */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: var(--dock-width);
+  max-width: 100%;
   overflow: hidden;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: auto;
   border-left: 3px solid #0a0c0e;
   background:
     linear-gradient(90deg, rgba(196, 163, 90, 0.08) 0%, transparent 8px),
@@ -457,16 +469,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  box-shadow: inset 1px 0 0 var(--brass-lo);
+  box-shadow:
+    inset 1px 0 0 var(--brass-lo),
+    -8px 0 24px rgba(0, 0, 0, 0.45);
 }
 
-/* Collapsed dock — dig canvas uses the full stage width */
+/* Collapsed dock — hide overlay; canvas size stays the same */
 .dock.is-closed {
   display: none;
-}
-
-.stage:has(> .dock.is-closed) {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel {
@@ -1737,38 +1747,35 @@ body {
   }
 
   .stage {
-    display: flex;
-    flex-direction: column;
     min-height: 0;
-    /* Allow dock to scroll; don't clip siblings / rail */
-    overflow: visible;
+    /* Clip dock to stage; rail is a fixed sibling outside */
+    overflow: hidden;
   }
 
   .canvas-wrap {
-    /* Prefer ~40vh but yield space so dock + rail stay usable */
-    flex: 0 1 40vh;
-    height: 40vh;
-    max-height: 40vh;
-    min-height: 120px;
+    /* Always fill the stage — dock overlays, never shrinks the world */
     width: 100%;
+    height: 100%;
+    min-height: 120px;
+    max-height: none;
   }
 
   .dock {
-    flex: 1 1 auto;
+    /* Bottom sheet over the canvas, above the fixed menu rail */
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: min(55vh, 100%);
     border-left: 0;
     border-top: 3px solid #000;
-    height: auto;
-    max-height: none;
-    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .stage:has(> .dock.is-closed) .canvas-wrap {
-    flex: 1 1 auto;
-    height: auto;
-    max-height: none;
+    box-shadow:
+      inset 0 1px 0 var(--brass-lo),
+      0 -8px 24px rgba(0, 0, 0, 0.5);
   }
 
   /* Always-visible Option A menu — fixed above the fold */
