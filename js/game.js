@@ -143,6 +143,10 @@ let dragMoved = false;
 let lastPan = null;
 /** Only dig/place when the press started on the canvas (not dock/hotbar). */
 let canvasPress = false;
+/** Active canvas pointers (pointerId → client coords) for pinch + pan. */
+const canvasPointers = new Map();
+/** Last pinch sample while two fingers are down, or null. */
+let pinchLast = null;
 let saveTimer = 0;
 let uiClock = 0;
 let treeTimer = 0;
