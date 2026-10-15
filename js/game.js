@@ -949,14 +949,43 @@ function ensureWorkerDigHeading(w) {
 
 /** Score bias for findTarget based on digger heading. */
 function headingScoreBias(headingId, workerSy) {
-  const cubeX = state.world.cubeCx ?? state.world.centerX;
-  const cubeY = state.world.cubeCy ?? state.world.centerY;
+  const world = state.world;
+  const cubeX = world.cubeCx ?? world.centerX;
+  const cubeY = world.cubeCy ?? world.centerY;
   if (headingId === 'widen') {
+    // Aim at prestige width: open more columns from surface down to the gate depth,
+    // growing sideways from columns that already count — not just local side-pecks.
+    const needY = prestigeUnlockDepthY(world);
+    const colsOpen = countColumnsOpenToDepth(world, needY);
+    const needMore = colsOpen < PRESTIGE_MIN_COLUMNS;
+    const openAtGate = new Uint8Array(world.w);
+    for (let x = 0; x < world.w; x++) {
+      if (columnOpenToSurface(world, x, needY)) openAtGate[x] = 1;
+    }
     return (nx, ny, x) => {
-      const lateral = nx !== x ? 18 : 0;
-      const stayLevel = Math.max(0, 16 - Math.abs(ny - workerSy) * 5);
-      const deepenPen = Math.max(0, ny - workerSy) * -4;
-      return lateral + stayLevel + deepenPen;
+      let score = 0;
+      if (nx !== x) score += 14;
+      else score -= 10; // same-column deepen fights widening
+
+      const inGateBand = ny >= world.surfaceY && ny <= needY;
+      const colDone = openAtGate[nx] === 1;
+
+      if (needMore && inGateBand && !colDone) {
+        score += 40;
+        const besideOpen =
+          (nx > 0 && openAtGate[nx - 1]) ||
+          (nx + 1 < world.w && openAtGate[nx + 1]);
+        if (besideOpen) score += 32;
+        // Prefer clearing higher in the column (top-down toward a full open shaft)
+        score += Math.max(0, 14 - (ny - world.surfaceY) * 0.2);
+      } else if (!needMore && nx !== x) {
+        // Gate met — keep fattening near current depth for breadth ◆
+        score += 8 + Math.max(0, 12 - Math.abs(ny - workerSy) * 3);
+      } else {
+        score += Math.max(0, 8 - Math.abs(ny - workerSy) * 3);
+        if (ny > workerSy) score -= 6;
+      }
+      return score;
     };
   }
   if (headingId === 'toward_core') {
@@ -1845,6 +1874,9 @@ function placementPreviewMarkers() {
   return markersForBuilding({ id: tool, x, y, uid: '__place__' }, 0.72);
 }
 
+/** Always-on faint pump dry radius (hover/select/flash can brighten). */
+const PUMP_OVERLAY_IDLE_ALPHA = 0.28;
+
 /** Buildings that should show range overlays this frame. */
 function buildingRadiusMarkers() {
   const now = performance.now();
@@ -1857,6 +1889,11 @@ function buildingRadiusMarkers() {
     const prev = picked.get(b.uid);
     if (!prev || alpha > prev.alpha) picked.set(b.uid, { b, alpha });
   };
+
+  // Pump cover stays faintly visible so dry pockets are always readable
+  for (const b of state.buildings) {
+    if (b.id === 'pump') add(b, PUMP_OVERLAY_IDLE_ALPHA);
+  }
 
   if (hover) {
     const hb = buildingAtTile(hover.x, hover.y);

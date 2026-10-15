@@ -617,7 +617,8 @@ export const DIG_HEADINGS = [
   {
     id: 'widen',
     label: 'Widen',
-    blurb: 'Prefer sideways digs near your depth — open a wider shaft for prestige.',
+    blurb:
+      'Open side columns down to prestige depth — grow a 3-wide shaft from the dig you already have, not a straw.',
   },
   {
     id: 'toward_core',
