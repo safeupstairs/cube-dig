@@ -1526,6 +1526,7 @@ function flashDrillRadius(uid, seconds = 2.5) {
 
 /**
  * Overlay markers for a building (diamond and/or surface span).
+ * Grove plants on the sky-pad row (building.y = surfaceY - 1), ±GROVE_SPAN.
  * @returns {Array<{x:number,y:number,radius:number,alpha:number,tint:string,mode?:string,span?:number}>}
  */
 function markersForBuilding(b, alpha) {
@@ -1534,18 +1535,10 @@ function markersForBuilding(b, alpha) {
   if (!cfg) return [];
   const out = [];
   if (cfg.mode === 'span') {
-    // Local camp footprint + surface forest column
+    // Plant strip on the sky pad (same Y as the grove house), not the dirt row below
     out.push({
       x: b.x,
       y: b.y,
-      radius: cfg.radius ?? 1,
-      alpha,
-      tint: cfg.tint,
-      mode: 'diamond',
-    });
-    out.push({
-      x: b.x,
-      y: state.world.surfaceY,
       radius: 0,
       span: cfg.span ?? GROVE_SPAN,
       alpha,
@@ -1583,6 +1576,19 @@ function describeBuildingRange(b) {
   return `r${cfg.radius}`;
 }
 
+/**
+ * Ghost range while a placeable tool is selected — snaps surface camps to the sky pad
+ * so the preview matches where the building will actually sit / plant / bore.
+ */
+function placementPreviewMarkers() {
+  if (!hover || !tool || !BUILDINGS[tool]) return [];
+  if (!BUILDING_OVERLAY[tool]) return [];
+  const x = hover.x;
+  const y = isSurfaceCamp(tool) ? state.world.surfaceY - 1 : hover.y;
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return [];
+  return markersForBuilding({ id: tool, x, y, uid: '__place__' }, 0.72);
+}
+
 /** Buildings that should show range overlays this frame. */
 function buildingRadiusMarkers() {
   const now = performance.now();
@@ -1614,6 +1620,8 @@ function buildingRadiusMarkers() {
   for (const { b, alpha } of picked.values()) {
     markers.push(...markersForBuilding(b, alpha));
   }
+  // Place-tool hover: show influence before commit (grove/drill/chapel/pump/ward)
+  markers.push(...placementPreviewMarkers());
   return markers;
 }
 
@@ -2454,7 +2462,7 @@ const MINE_FILLER = ['stone', 'dirt', 'grass'];
 /** Manhattan radius — drills bore solid tiles in this range (fog OK). Nerfed vs v2. */
 const MINE_RADIUS = 3;
 const DRILL_RADIUS = MINE_RADIUS;
-/** Grove surface column half-width (matches xOffsets ±4). */
+/** Grove sky-pad plant half-width (matches FOREST_X_OFFSETS ±4 on building.y). */
 const GROVE_SPAN = 4;
 const FOREST_X_OFFSETS = [0, 1, -1, 2, -2, 3, -3, 4, -4];
 /** Seconds between grove plant attempts at rate 1 (Deeper shafts shortens this). Was 1.4. */
@@ -2463,7 +2471,7 @@ const GROVE_PLANT_INTERVAL = 4.5;
 /** Gameplay range overlays (drill, grove, chapel heal, pump dry, ward burn). */
 const BUILDING_OVERLAY = {
   mine: { radius: DRILL_RADIUS, tint: 'amber', label: 'bore' },
-  grove: { radius: 1, span: GROVE_SPAN, tint: 'green', label: 'plant', mode: 'span' },
+  grove: { span: GROVE_SPAN, tint: 'green', label: 'plant', mode: 'span' },
   chapel: { radius: CHAPEL_RADIUS, tint: 'cream', label: 'heal' },
   pump: { radius: PUMP_RADIUS, tint: 'teal', label: 'dry' },
   ward: { radius: WARD_RADIUS, tint: 'violet', label: 'ward' },
