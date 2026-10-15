@@ -12,6 +12,7 @@
       }
       #app.mock-a {
         height: 100vh;
+        grid-template-rows: auto auto 1fr auto;
       }
       .mock-banner {
         background: #1a2228;
@@ -21,9 +22,49 @@
         font-size: 1rem;
         color: var(--accent);
         text-align: center;
+        grid-column: 1 / -1;
       }
       .mock-banner span {
         color: var(--muted);
+      }
+      .bag-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 0.65rem;
+        align-items: center;
+        padding: 0.35rem 0.75rem;
+        border-bottom: 3px solid #000;
+        background: linear-gradient(180deg, #243038 0%, #1e282f 100%);
+        box-shadow: inset 0 -1px 0 var(--panel-edge);
+        font-family: var(--mono);
+      }
+      .bag-bar .bag-label {
+        font-family: var(--pixel);
+        font-size: 0.4rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        margin-right: 0.25rem;
+      }
+      .bag-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.3rem;
+        padding: 0.15rem 0.45rem;
+        border: 2px solid #000;
+        background: var(--slot);
+        box-shadow: inset -1px -1px 0 #0a0c0e, inset 1px 1px 0 var(--slot-hi);
+        min-width: 4.2rem;
+      }
+      .bag-chip .n {
+        color: var(--text);
+        font-size: 1.05rem;
+      }
+      .bag-chip .k {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .bag-chip.is-empty {
+        opacity: 0.45;
       }
       .dock.mock-single {
         overflow: hidden;
@@ -44,6 +85,15 @@
       }
       .dock.mock-single .panel-chevron {
         display: none;
+      }
+      .dock.mock-single > .panel-switch {
+        display: none !important;
+      }
+      .dock.mock-single > .panel-switch.is-on {
+        display: flex !important;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
       }
       .footer-row {
         display: flex;
@@ -93,10 +143,13 @@
       .build-grid .hot-slot .slot-role {
         white-space: normal;
       }
+      .build-grid .hot-slot.is-danger .slot-name {
+        color: var(--danger);
+      }
       .canvas-placeholder {
         width: 100%;
         height: 100%;
-        min-height: 420px;
+        min-height: 360px;
         background:
           linear-gradient(180deg, #6a9ec4 0%, #8ab4d0 18%, #5a7a48 18%, #5a7a48 22%, #3a2e24 22%, #2a221c 100%);
         border: 2px solid #000;
@@ -122,22 +175,20 @@
         color: var(--accent);
         font-size: 0.95rem;
       }
-      .dock.mock-single > .panel-switch {
-        display: none !important;
+      .crew-hire {
+        margin-bottom: 0.65rem;
       }
-      .dock.mock-single > .panel-switch.is-on {
-        display: flex !important;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
+      .crew-hire .btn {
+        width: 100%;
       }
     </style>
   </head>
   <body>
-    <div class="mock-banner">
-      Option A — <span>one bottom menu rail · Buildings opens the right panel (no separate hotbar)</span>
-    </div>
     <div id="app" class="mock-a">
+      <div class="mock-banner">
+        Option A — <span>bags always on top · Build holds place + Demolish · Hire in Crew · no Bags rail</span>
+      </div>
+
       <header class="hud-top">
         <div class="brand">
           <h1>The Cube Dig</h1>
@@ -162,17 +213,29 @@
         </div>
       </header>
 
+      <div class="bag-bar" aria-label="Bags">
+        <span class="bag-label">BAGS</span>
+        <span class="bag-chip"><span class="k">Wood</span><span class="n">14</span></span>
+        <span class="bag-chip"><span class="k">Stone</span><span class="n">9</span></span>
+        <span class="bag-chip"><span class="k">Coal</span><span class="n">11</span></span>
+        <span class="bag-chip"><span class="k">Iron</span><span class="n">6</span></span>
+        <span class="bag-chip"><span class="k">Gold</span><span class="n">2</span></span>
+        <span class="bag-chip is-empty"><span class="k">Crystal</span><span class="n">0</span></span>
+        <span class="bag-chip"><span class="k">Frag</span><span class="n">1</span></span>
+        <span class="bag-chip is-empty"><span class="k">Iron bar</span><span class="n">0</span></span>
+        <span class="bag-chip is-empty"><span class="k">Gold bar</span><span class="n">0</span></span>
+      </div>
+
       <main class="stage">
         <div class="canvas-wrap">
           <div class="canvas-placeholder" aria-hidden="true"></div>
         </div>
         <aside class="dock mock-single">
-          <!-- Buildings panel (default selected) -->
           <section class="panel panel-switch is-on" data-panel="build" id="panel-build">
             <h2 class="panel-title panel-head">Buildings</h2>
             <div class="panel-body">
-              <p class="muted">Pick a building, then click the map to place. Costs scale with how many you already have.</p>
-              <p class="callout">Buildings menu selected → placeables live here (hotbar moved into this panel).</p>
+              <p class="muted">Pick a building, then click the map to place. Demolish removes a placed building.</p>
+              <p class="callout">Build rail → placeables + Demolish in this panel.</p>
               <div class="build-grid">
                 <button type="button" class="hot-slot is-active">
                   <div class="slot-main">
@@ -200,8 +263,7 @@
                     <span class="slot-name">Smelter</span>
                   </div>
                   <span class="slot-role"
-                    ><span class="cost-ok">100c</span>, <span class="cost-ok">12 stone</span>,
-                    <span class="cost-miss">8 coal</span></span
+                    ><span class="cost-ok">100c</span>, <span class="cost-miss">8 coal</span></span
                   >
                 </button>
                 <button type="button" class="hot-slot">
@@ -210,8 +272,7 @@
                     <span class="slot-name">Grove house</span>
                   </div>
                   <span class="slot-role"
-                    ><span class="cost-ok">22c</span>, <span class="cost-ok">8 wood</span>,
-                    <span class="cost-ok">2 stone</span></span
+                    ><span class="cost-ok">22c</span>, <span class="cost-ok">8 wood</span></span
                   >
                 </button>
                 <button type="button" class="hot-slot">
@@ -220,8 +281,7 @@
                     <span class="slot-name">Chapel</span>
                   </div>
                   <span class="slot-role"
-                    ><span class="cost-ok">70c</span>, <span class="cost-ok">8 wood</span>,
-                    <span class="cost-ok">8 stone</span>, <span class="cost-miss">1 fragment</span></span
+                    ><span class="cost-ok">70c</span>, <span class="cost-miss">1 fragment</span></span
                   >
                 </button>
                 <button type="button" class="hot-slot">
@@ -240,25 +300,34 @@
                     <span class="slot-name">Ward post</span>
                   </div>
                   <span class="slot-role"
-                    ><span class="cost-miss">85c</span>, <span class="cost-ok">10 stone</span>,
-                    <span class="cost-miss">1 crystal</span>, <span class="cost-miss">2 fragment</span></span
+                    ><span class="cost-miss">85c</span>, <span class="cost-miss">1 crystal</span></span
                   >
+                </button>
+                <button type="button" class="hot-slot is-danger">
+                  <div class="slot-main">
+                    <span class="slot-key">X</span>
+                    <span class="slot-name">Demolish</span>
+                  </div>
+                  <span class="slot-role">click a building on the map</span>
                 </button>
               </div>
             </div>
           </section>
 
-          <!-- Market panel (hidden until rail click) -->
-          <section class="panel panel-switch" data-panel="market" id="panel-market">
-            <h2 class="panel-title panel-head">
-              Village market
-              <button type="button" class="help-btn" aria-label="Village market help">?</button>
-            </h2>
+          <section class="panel panel-switch" data-panel="crew" id="panel-crew">
+            <h2 class="panel-title panel-head">Crew</h2>
             <div class="panel-body">
-              <p class="muted">
-                Sell bag stock for coins. Keep N + Auto sells surplus as it arrives. Bars pay more than
-                raw ore.
-              </p>
+              <div class="crew-hire">
+                <button type="button" class="btn is-ready">Hire worker — 14c (0/3)</button>
+              </div>
+              <p class="muted">No diggers yet. Hire above, then set Orders.</p>
+            </div>
+          </section>
+
+          <section class="panel panel-switch" data-panel="market" id="panel-market">
+            <h2 class="panel-title panel-head">Village market</h2>
+            <div class="panel-body">
+              <p class="muted">Sell bag stock for coins. Keep N + Auto sells surplus.</p>
               <div class="market-list">
                 <div class="market-row is-ready">
                   <div class="market-meta">
@@ -276,23 +345,15 @@
                     <button type="button" class="btn is-ready">All</button>
                   </div>
                 </div>
-                <div class="market-row is-ready">
-                  <div class="market-meta">
-                    <h3>Coal</h3>
-                    <p>4c each · bag 11 · auto keep 5</p>
-                  </div>
-                  <div class="market-actions">
-                    <label class="market-keep"
-                      ><span>keep</span><input class="market-keep-input" type="number" value="5"
-                    /></label>
-                    <label class="market-auto is-on"
-                      ><input class="market-auto-input" type="checkbox" checked /><span>Auto</span></label
-                    >
-                    <button type="button" class="btn is-ready">1</button>
-                    <button type="button" class="btn is-ready">All</button>
-                  </div>
-                </div>
               </div>
+            </div>
+          </section>
+
+          <section class="panel panel-switch" data-panel="tools" id="panel-tools">
+            <h2 class="panel-title panel-head">Tools</h2>
+            <div class="panel-body">
+              <p class="muted">Map tool — Dig / chop is the default when you’re not placing or demolishing.</p>
+              <button type="button" class="btn is-ready" style="width: 100%">Dig / chop</button>
             </div>
           </section>
         </aside>
@@ -303,11 +364,6 @@
           <span class="slot-key">1</span>
           <span class="slot-name">Build</span>
           <span class="slot-role">place</span>
-        </button>
-        <button type="button" class="hot-slot" data-open="bags">
-          <span class="slot-key">B</span>
-          <span class="slot-name">Bags</span>
-          <span class="slot-role">inv</span>
         </button>
         <button type="button" class="hot-slot" data-open="market">
           <span class="slot-key">M</span>
@@ -322,7 +378,7 @@
         <button type="button" class="hot-slot" data-open="crew">
           <span class="slot-key">C</span>
           <span class="slot-name">Crew</span>
-          <span class="slot-role">orders</span>
+          <span class="slot-role">hire</span>
         </button>
         <button type="button" class="hot-slot" data-open="upgrades">
           <span class="slot-key">U</span>
@@ -344,9 +400,24 @@
           const id = btn.getAttribute('data-open');
           rail.forEach((b) => b.classList.remove('is-active'));
           btn.classList.add('is-active');
+          let shown = false;
           panels.forEach((el) => {
-            el.classList.toggle('is-on', el.getAttribute('data-panel') === id);
+            const on = el.getAttribute('data-panel') === id;
+            el.classList.toggle('is-on', on);
+            if (on) shown = true;
           });
+          if (!shown) {
+            // stub for upgrades/prestige in preview
+            const stub = document.getElementById('panel-tools');
+            if (stub) {
+              stub.classList.add('is-on');
+              stub.querySelector('.panel-head').textContent = btn.querySelector('.slot-name').textContent;
+              stub.querySelector('.panel-body').innerHTML =
+                '<p class="muted">Preview stub — in-game this shows ' +
+                btn.querySelector('.slot-name').textContent +
+                '.</p>';
+            }
+          }
         });
       });
     </script>

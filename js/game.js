@@ -96,6 +96,9 @@ const els = {
   resetBtn: document.getElementById('reset-btn'),
   introBtn: document.getElementById('intro-btn'),
   hotbar: document.getElementById('hotbar'),
+  crewHire: document.getElementById('crew-hire'),
+  menuRail: document.getElementById('menu-rail'),
+  dock: document.getElementById('dock'),
   ending: document.getElementById('ending'),
   endingText: document.getElementById('ending-text'),
   endingClose: document.getElementById('ending-close'),
@@ -2525,6 +2528,7 @@ function renderUi() {
     const n = state.bags[k] || 0;
     if (!n && k !== 'wood' && k !== 'stone' && k !== 'ironBar') continue;
     const li = document.createElement('li');
+    if (!n) li.classList.add('is-empty');
     const a = document.createElement('span');
     a.textContent = meta.name;
     const b = document.createElement('strong');
@@ -2533,6 +2537,7 @@ function renderUi() {
     els.bags.appendChild(li);
   }
 
+  // Tools panel: dig / chop only
   els.tools.innerHTML = '';
   const digBtn = document.createElement('button');
   digBtn.type = 'button';
@@ -2541,82 +2546,70 @@ function renderUi() {
   bindTip(
     digBtn,
     'Dig / chop',
-    'Click exposed blocks to mine. Click a digger to select them and set dig filter / home shack in Worker orders.'
+    'Click exposed blocks to mine. Click a digger to select them and set dig filter / home shack in Crew → Orders.'
   );
   digBtn.addEventListener('click', () => {
     tool = null;
+    setDockPanel('tools');
     renderUi();
   });
   els.tools.appendChild(digBtn);
 
-  const wCost = nextWorkerCost(state);
-  const wCap = workerCap(state);
-  const atWorkerCap = state.workers.length >= wCap;
-  const canHire = !atWorkerCap && (cheats.freeBuild || state.coins >= wCost);
-  const hireSelected = tool === 'worker' && canHire;
-  const wBtn = document.createElement('button');
-  wBtn.type = 'button';
-  wBtn.className =
-    'tool' +
-    (hireSelected ? ' is-active' : '') +
-    (canHire ? ' is-affordable' : ' is-locked');
-  wBtn.disabled = !canHire;
-  wBtn.textContent = `Worker (${wCost}c) ${state.workers.length}/${wCap}`;
-  bindTip(
-    wBtn,
-    'Hire digger',
-    'Select, then click a shaft tile. Digging wears life — rest restores energy only; chapels heal life. Rare rain floods undrained shaft; pumps keep diggers dry. Horrors hunt deep.',
-    canHire
-      ? `${wCost} coins · ${state.workers.length}/${wCap} hired`
-      : atWorkerCap
-        ? `at cap ${wCap} — build shacks`
-        : `need ${wCost} coins · ${state.workers.length}/${wCap} hired`
-  );
-  wBtn.addEventListener('click', () => {
-    unlockAudio();
-    if (state.workers.length >= workerCap(state)) {
-      tool = null;
-      setStatus('Worker cap reached. Build shacks.');
-      sfx.deny();
+  // Crew panel: hire worker
+  if (els.crewHire) {
+    els.crewHire.innerHTML = '';
+    const wCost = nextWorkerCost(state);
+    const wCap = workerCap(state);
+    const atWorkerCap = state.workers.length >= wCap;
+    const canHire = !atWorkerCap && (cheats.freeBuild || state.coins >= wCost);
+    const hireSelected = tool === 'worker' && canHire;
+    const wBtn = document.createElement('button');
+    wBtn.type = 'button';
+    wBtn.className =
+      'tool' +
+      (hireSelected ? ' is-active' : '') +
+      (canHire ? ' is-affordable' : ' is-locked');
+    wBtn.disabled = !canHire;
+    wBtn.textContent = `Hire worker (${wCost}c) ${state.workers.length}/${wCap}`;
+    bindTip(
+      wBtn,
+      'Hire digger',
+      'Select, then click a shaft tile. Digging wears life — rest restores energy only; chapels heal life. Rare rain floods undrained shaft; pumps keep diggers dry. Horrors hunt deep.',
+      canHire
+        ? `${wCost} coins · ${state.workers.length}/${wCap} hired`
+        : atWorkerCap
+          ? `at cap ${wCap} — build shacks`
+          : `need ${wCost} coins · ${state.workers.length}/${wCap} hired`
+    );
+    wBtn.addEventListener('click', () => {
+      unlockAudio();
+      if (state.workers.length >= workerCap(state)) {
+        tool = null;
+        setStatus('Worker cap reached. Build shacks.');
+        sfx.deny();
+        renderUi();
+        return;
+      }
+      if (!cheats.freeBuild && state.coins < nextWorkerCost(state)) {
+        tool = null;
+        setStatus(`Need ${nextWorkerCost(state)} coins.`);
+        sfx.deny();
+        renderUi();
+        return;
+      }
+      tool = 'worker';
+      setDockPanel('crew');
+      setStatus('Click a shaft tile to place a digger. They dig exposed walls/floor.');
       renderUi();
-      return;
-    }
-    if (!cheats.freeBuild && state.coins < nextWorkerCost(state)) {
-      tool = null;
-      setStatus(`Need ${nextWorkerCost(state)} coins.`);
-      sfx.deny();
-      renderUi();
-      return;
-    }
-    tool = 'worker';
-    setStatus('Click a shaft tile to place a digger. They dig exposed walls/floor.');
-    renderUi();
-  });
-  els.tools.appendChild(wBtn);
-
-  const demoBtn = document.createElement('button');
-  demoBtn.type = 'button';
-  demoBtn.className = 'tool' + (tool === 'demolish' ? ' is-active' : '');
-  demoBtn.textContent = 'Demolish';
-  bindTip(
-    demoBtn,
-    'Demolish',
-    'Click a building to remove it. Refunds 50% of what you paid to place it (coins and materials, rounded down). The village market and starter props cannot be demolished. Workers assigned to a demolished shack fall back to nearest / spawn.'
-  );
-  demoBtn.addEventListener('click', () => {
-    unlockAudio();
-    tool = 'demolish';
-    setStatus('Demolish mode: click a building to remove it (50% refund).');
-    renderUi();
-  });
-  els.tools.appendChild(demoBtn);
+    });
+    els.crewHire.appendChild(wBtn);
+  }
 
   renderCrew();
   renderOrdersPanel();
   renderMarketPanel();
 
-  // Buildings only — dig/chop lives in the Tools panel (not a building)
-  // Starter village pieces (market, cottage, stall) stay off the hotbar
+  // Build panel: placeables + demolish (starter village stays off the list)
   els.hotbar.innerHTML = '';
   let slotN = 1;
   for (const b of Object.values(BUILDINGS)) {
@@ -2635,10 +2628,8 @@ function renderUi() {
     const costHtml = formatCostHtml(placeCost);
     const ownedN = buildingCount(b.id);
     const owned = ownedN > 0 ? ` ×${ownedN}` : '';
-    const roleLine = canBuild
-      ? costHtml || b.role || ''
-      : costHtml;
-    btn.innerHTML = `<span class="slot-key">${slotN}</span><span class="slot-name">${b.name}${owned}</span><span class="slot-role">${roleLine}</span>`;
+    const roleLine = canBuild ? costHtml || b.role || '' : costHtml;
+    btn.innerHTML = `<span class="slot-main"><span class="slot-key">${slotN}</span><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
     slotN += 1;
     bindTip(btn, b.name, b.blurb, () => {
       const tipCost = formatCostHtml(nextBuildingCost(b.id));
@@ -2653,6 +2644,7 @@ function renderUi() {
     btn.addEventListener('click', () => {
       unlockAudio();
       tool = b.id;
+      setDockPanel('build');
       setStatusHtml(
         `Place ${b.name} (${formatCostHtml(nextBuildingCost(b.id))}): ${b.blurb}`
       );
@@ -2660,6 +2652,26 @@ function renderUi() {
     });
     els.hotbar.appendChild(btn);
   }
+
+  const demoBtn = document.createElement('button');
+  demoBtn.type = 'button';
+  demoBtn.className =
+    'hot-slot is-danger' + (tool === 'demolish' ? ' is-active' : '');
+  demoBtn.innerHTML =
+    '<span class="slot-main"><span class="slot-key">X</span><span class="slot-name">Demolish</span></span><span class="slot-role">click a building · 50% refund</span>';
+  bindTip(
+    demoBtn,
+    'Demolish',
+    'Click a building to remove it. Refunds 50% of what you paid to place it (coins and materials, rounded down). The village market and starter props cannot be demolished. Workers assigned to a demolished shack fall back to nearest / spawn.'
+  );
+  demoBtn.addEventListener('click', () => {
+    unlockAudio();
+    tool = 'demolish';
+    setDockPanel('build');
+    setStatus('Demolish mode: click a building to remove it (50% refund).');
+    renderUi();
+  });
+  els.hotbar.appendChild(demoBtn);
 
   els.upgrades.innerHTML = '';
   for (const u of UPGRADES) {
@@ -3498,94 +3510,60 @@ function bindHelpTips() {
   }
 }
 
-const DOCK_COLLAPSE_KEY = 'cube-dig-dock-collapse';
+const DOCK_PANEL_KEY = 'cube-dig-dock-panel';
+const DOCK_PANEL_IDS = ['build', 'market', 'tools', 'crew', 'upgrades', 'prestige'];
 
-/** First visit: keep Bags + Tools open; collapse the rest to save vertical space. */
-const DOCK_COLLAPSE_DEFAULTS = {
-  bags: false,
-  market: true,
-  tools: false,
-  crew: false,
-  upgrades: true,
-  prestige: true,
-  status: true,
-};
-
-function loadDockCollapse() {
+function loadDockPanel() {
   try {
-    const raw = localStorage.getItem(DOCK_COLLAPSE_KEY);
-    if (!raw) return { ...DOCK_COLLAPSE_DEFAULTS };
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { ...DOCK_COLLAPSE_DEFAULTS };
-    // Orders lives under Crew — drop legacy independent collapse key.
-    const hadOrders = Object.prototype.hasOwnProperty.call(parsed, 'orders');
-    if (hadOrders) delete parsed.orders;
-    const map = { ...DOCK_COLLAPSE_DEFAULTS, ...parsed };
-    if (hadOrders) saveDockCollapse(map);
-    return map;
+    const raw = localStorage.getItem(DOCK_PANEL_KEY);
+    if (raw && DOCK_PANEL_IDS.includes(raw)) return raw;
   } catch {
-    return { ...DOCK_COLLAPSE_DEFAULTS };
+    /* ignore */
   }
+  return 'build';
 }
 
-function saveDockCollapse(map) {
+function saveDockPanel(id) {
   try {
-    localStorage.setItem(DOCK_COLLAPSE_KEY, JSON.stringify(map));
+    localStorage.setItem(DOCK_PANEL_KEY, id);
   } catch {
     /* ignore quota / private mode */
   }
 }
 
-function setPanelCollapsed(host, collapsed) {
-  if (!host) return;
-  host.classList.toggle('is-collapsed', collapsed);
-  const head = host.querySelector(':scope > .panel-head');
-  if (head) {
-    head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    const chevron = head.querySelector('.panel-chevron');
-    if (chevron) chevron.textContent = collapsed ? '▶' : '▼';
+/** Swap the single right-dock panel (Option A menu rail). */
+function setDockPanel(id) {
+  if (!DOCK_PANEL_IDS.includes(id)) return;
+  const dock = els.dock || document.querySelector('aside.dock');
+  if (!dock) return;
+  for (const host of dock.querySelectorAll(':scope > .panel[data-panel]')) {
+    const on = host.getAttribute('data-panel') === id;
+    host.classList.toggle('is-active-panel', on);
+    host.hidden = !on;
   }
+  const rail = els.menuRail || document.getElementById('menu-rail');
+  if (rail) {
+    for (const btn of rail.querySelectorAll('[data-dock]')) {
+      const on = btn.getAttribute('data-dock') === id;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  saveDockPanel(id);
 }
 
-function bindDockCollapse() {
-  const dock = document.querySelector('aside.dock');
-  if (!dock) return;
-  const stateMap = loadDockCollapse();
-
-  const hosts = [...dock.querySelectorAll(':scope > .panel[data-panel]')];
-
-  for (const host of hosts) {
-    const id = host.getAttribute('data-panel');
-    if (!id) continue;
-    const head = host.querySelector(':scope > .panel-head');
-    if (!head) continue;
-
-    setPanelCollapsed(host, !!stateMap[id]);
-
-    const toggle = () => {
-      const next = !host.classList.contains('is-collapsed');
-      setPanelCollapsed(host, next);
-      stateMap[id] = next;
-      saveDockCollapse(stateMap);
-    };
-
-    head.addEventListener('click', (e) => {
-      if (e.target.closest('.help-btn')) return;
-      e.preventDefault();
-      toggle();
-    });
-    head.addEventListener('keydown', (e) => {
-      if (e.target.closest('.help-btn')) return;
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault();
-      toggle();
+function bindMenuRail() {
+  const rail = els.menuRail || document.getElementById('menu-rail');
+  if (!rail) return;
+  for (const btn of rail.querySelectorAll('[data-dock]')) {
+    btn.addEventListener('click', () => {
+      unlockAudio();
+      const id = btn.getAttribute('data-dock');
+      if (!id) return;
+      setDockPanel(id);
     });
   }
-
-  // Help ? must not bubble into panel toggle
-  for (const btn of dock.querySelectorAll('.help-btn')) {
-    btn.addEventListener('click', (e) => e.stopPropagation());
-  }
+  setDockPanel(loadDockPanel());
 }
 
 /** Map current client pointer to world hover (or clear if off-canvas). */
@@ -4102,7 +4080,7 @@ function boot() {
   centerCamera();
   renderUi();
   bindHelpTips();
-  bindDockCollapse();
+  bindMenuRail();
   bindCheats();
   refreshWeatherHud();
   setStatus(

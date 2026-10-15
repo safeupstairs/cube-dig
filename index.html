@@ -45,23 +45,30 @@
         </div>
       </header>
 
+      <div class="bag-bar" aria-label="Bags">
+        <span class="bag-bar-label">Bags</span>
+        <ul id="bags" class="bag-chips"></ul>
+      </div>
+
+      <p id="status" class="status-bar status" aria-live="polite">
+        Dig exposed blocks. Tunnel down through the fog.
+      </p>
+
       <main class="stage">
         <div class="canvas-wrap">
           <canvas id="world" width="960" height="640"></canvas>
         </div>
-        <aside class="dock">
-          <section class="panel" data-panel="bags">
-            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
-              Bags
-            </h2>
+        <aside class="dock" id="dock">
+          <section class="panel is-active-panel" data-panel="build" id="panel-build">
+            <h2 class="panel-title panel-head">Buildings</h2>
             <div class="panel-body">
-              <ul id="bags" class="bags"></ul>
+              <p class="muted">Pick a building, then click the map to place. Demolish refunds 50%.</p>
+              <div id="hotbar" class="build-grid"></div>
             </div>
           </section>
-          <section class="panel" id="market-panel" data-panel="market">
-            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
+
+          <section class="panel" id="market-panel" data-panel="market" hidden>
+            <h2 class="panel-title panel-head">
               Village market
               <button type="button" class="help-btn" id="help-market" aria-label="Village market help">?</button>
             </h2>
@@ -70,22 +77,22 @@
               <div id="market" class="market-list"></div>
             </div>
           </section>
-          <section class="panel" data-panel="tools">
-            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
-              Tools
-            </h2>
+
+          <section class="panel" data-panel="tools" id="panel-tools" hidden>
+            <h2 class="panel-title panel-head">Tools</h2>
             <div class="panel-body">
+              <p class="muted">Default map tool when you are not placing, hiring, or demolishing.</p>
               <div id="tools" class="tool-grid"></div>
             </div>
           </section>
-          <section class="panel" id="orders-panel" data-panel="crew">
-            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
+
+          <section class="panel" id="orders-panel" data-panel="crew" hidden>
+            <h2 class="panel-title panel-head">
               Crew
               <button type="button" class="help-btn" id="help-crew" aria-label="Crew help">?</button>
             </h2>
             <div class="panel-body">
+              <div id="crew-hire" class="crew-hire"></div>
               <div id="crew" class="crew-list"></div>
               <div class="panel-section">
                 <h2 class="subhead panel-title">
@@ -97,18 +104,16 @@
               </div>
             </div>
           </section>
-          <section class="panel" data-panel="upgrades">
-            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
-              Upgrades
-            </h2>
+
+          <section class="panel" data-panel="upgrades" id="panel-upgrades" hidden>
+            <h2 class="panel-title panel-head">Upgrades</h2>
             <div class="panel-body">
               <div id="upgrades" class="shop-list"></div>
             </div>
           </section>
-          <section class="panel" data-panel="prestige">
-            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
+
+          <section class="panel" data-panel="prestige" id="panel-prestige" hidden>
+            <h2 class="panel-title panel-head">
               Prestige
               <button type="button" class="help-btn" id="help-prestige" aria-label="Prestige help">?</button>
             </h2>
@@ -116,23 +121,47 @@
               <p id="prestige-blurb" class="muted prestige-status"></p>
               <div id="shard-upgrades" class="shop-list"></div>
               <button type="button" id="prestige-btn" class="btn danger">Prestige</button>
-            </div>
-          </section>
-          <section class="panel" data-panel="status">
-            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
-              <span class="panel-chevron" aria-hidden="true">▼</span>
-              Status
-            </h2>
-            <div class="panel-body">
-              <p id="status" class="status">Dig exposed blocks. Tunnel down through the fog.</p>
-              <button type="button" id="intro-btn" class="btn ghost">How to play</button>
-              <button type="button" id="reset-btn" class="btn ghost">Hard reset</button>
+              <div class="panel-section help-actions">
+                <button type="button" id="intro-btn" class="btn ghost">How to play</button>
+                <button type="button" id="reset-btn" class="btn ghost">Hard reset</button>
+              </div>
             </div>
           </section>
         </aside>
       </main>
 
-      <footer class="hotbar" id="hotbar"></footer>
+      <nav class="menu-rail" id="menu-rail" aria-label="Menu">
+        <button type="button" class="hot-slot is-active" data-dock="build">
+          <span class="slot-key">1</span>
+          <span class="slot-name">Build</span>
+          <span class="slot-role">place</span>
+        </button>
+        <button type="button" class="hot-slot" data-dock="market">
+          <span class="slot-key">M</span>
+          <span class="slot-name">Market</span>
+          <span class="slot-role">sell</span>
+        </button>
+        <button type="button" class="hot-slot" data-dock="tools">
+          <span class="slot-key">T</span>
+          <span class="slot-name">Tools</span>
+          <span class="slot-role">dig</span>
+        </button>
+        <button type="button" class="hot-slot" data-dock="crew">
+          <span class="slot-key">C</span>
+          <span class="slot-name">Crew</span>
+          <span class="slot-role">hire</span>
+        </button>
+        <button type="button" class="hot-slot" data-dock="upgrades">
+          <span class="slot-key">U</span>
+          <span class="slot-name">Upgrades</span>
+          <span class="slot-role">shop</span>
+        </button>
+        <button type="button" class="hot-slot" data-dock="prestige">
+          <span class="slot-key">P</span>
+          <span class="slot-name">Prestige</span>
+          <span class="slot-role">shards</span>
+        </button>
+      </nav>
     </div>
 
     <div id="tip" class="tip hidden" role="tooltip" aria-hidden="true"></div>
