@@ -3536,6 +3536,8 @@ function bindHelpTips() {
 
 const DOCK_PANEL_KEY = 'cube-dig-dock-panel';
 const DOCK_PANEL_IDS = ['build', 'market', 'crew', 'upgrades', 'prestige'];
+/** Currently visible dock panel id, or null when the dock is collapsed. */
+let activeDockPanel = null;
 
 function loadDockPanel() {
   try {
@@ -3557,25 +3559,43 @@ function saveDockPanel(id) {
   }
 }
 
-/** Swap the single right-dock panel (Option A menu rail). */
+/** Open a dock panel, or pass null to collapse the dock (canvas takes the space). */
 function setDockPanel(id) {
-  if (!DOCK_PANEL_IDS.includes(id)) return;
+  const open = id != null && DOCK_PANEL_IDS.includes(id);
+  if (id != null && !open) return;
   const dock = els.dock || document.querySelector('aside.dock');
   if (!dock) return;
+
+  activeDockPanel = open ? id : null;
+  dock.classList.toggle('is-closed', !open);
+
   for (const host of dock.querySelectorAll(':scope > .panel[data-panel]')) {
-    const on = host.getAttribute('data-panel') === id;
+    const on = open && host.getAttribute('data-panel') === id;
     host.classList.toggle('is-active-panel', on);
     host.hidden = !on;
   }
   const rail = els.menuRail || document.getElementById('menu-rail');
   if (rail) {
     for (const btn of rail.querySelectorAll('[data-dock]')) {
-      const on = btn.getAttribute('data-dock') === id;
+      const on = open && btn.getAttribute('data-dock') === id;
       btn.classList.toggle('is-active', on);
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
-  saveDockPanel(id);
+  if (open) saveDockPanel(id);
+
+  // Layout width changes when the dock collapses/expands — reflow the dig canvas.
+  requestAnimationFrame(() => {
+    renderer.resize();
+    refreshHoverAfterCamera();
+  });
+}
+
+/** Rail / digit shortcut: open panel, or close if that panel is already active. */
+function selectDockPanel(id) {
+  if (!DOCK_PANEL_IDS.includes(id)) return;
+  if (activeDockPanel === id) setDockPanel(null);
+  else setDockPanel(id);
 }
 
 function bindMenuRail() {
@@ -3586,7 +3606,7 @@ function bindMenuRail() {
       unlockAudio();
       const id = btn.getAttribute('data-dock');
       if (!id) return;
-      setDockPanel(id);
+      selectDockPanel(id);
     });
   }
   setDockPanel(loadDockPanel());
@@ -4237,13 +4257,13 @@ function boot() {
         e.target.tagName === 'TEXTAREA' ||
         e.target.tagName === 'SELECT' ||
         e.target.isContentEditable);
-    // Menu rail: 1…N switches dock panel (matches slot-keys / DOCK_PANEL_IDS)
+    // Menu rail: 1…N toggles dock panel (matches slot-keys / DOCK_PANEL_IDS)
     if (!typing && /^[1-9]$/.test(e.key)) {
       const idx = Number(e.key) - 1;
       if (idx >= 0 && idx < DOCK_PANEL_IDS.length) {
         e.preventDefault();
         unlockAudio();
-        setDockPanel(DOCK_PANEL_IDS[idx]);
+        selectDockPanel(DOCK_PANEL_IDS[idx]);
         return;
       }
     }
