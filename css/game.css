@@ -148,9 +148,23 @@ body {
   padding: 0;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.3rem;
   flex: 1 1 auto;
   font-family: var(--mono);
+}
+
+.bag-chips li.bag-sep {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0.15rem 0 0.35rem;
+  font-family: var(--pixel);
+  font-size: 0.38rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.85;
 }
 
 .bag-chips li {
@@ -718,6 +732,10 @@ body {
   gap: 0.35rem;
 }
 
+.build-grid > .shop-group {
+  margin-top: 0.45rem;
+}
+
 .build-grid .hot-slot {
   width: 100%;
   max-width: none;
@@ -819,6 +837,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+}
+
+.shop-group {
+  margin: 0.55rem 0 0.15rem;
+  padding: 0;
+  font-family: var(--pixel);
+  font-size: 0.48rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.shop-list > .shop-group:first-child,
+.market-list > .shop-group:first-child,
+.build-grid > .shop-group:first-child {
+  margin-top: 0;
+}
+
+.shop-lead {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+}
+
+.shop-row p:not(.shop-hint) {
+  display: none; /* blurbs live in hover tips — keeps the list short */
 }
 
 .market-list {

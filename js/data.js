@@ -142,6 +142,63 @@ export const RESOURCE_META = {
   copperWire: { name: 'Copper wire', sell: 5 },
 };
 
+/** HUD / market ordering — keep bags readable as the catalog grows. */
+export const RESOURCE_GROUPS = [
+  { id: 'basic', label: 'Basics', keys: ['wood', 'stone', 'dirt'] },
+  { id: 'ore', label: 'Ores', keys: ['coal', 'copper', 'iron', 'gold', 'crystal'] },
+  { id: 'cube', label: 'Cube', keys: ['fragment'] },
+  {
+    id: 'craft',
+    label: 'Crafted',
+    keys: ['copperBar', 'ironBar', 'goldBar', 'steelBar', 'copperWire', 'crystalLens'],
+  },
+];
+
+/** Always show these bag chips even at 0 (early loop staples). */
+export const BAG_PINNED = ['wood', 'stone'];
+
+/** Build hotbar sections (hotbar:false buildings omitted). */
+export const BUILDING_GROUPS = [
+  { id: 'surface', label: 'Surface', ids: ['grove', 'smelter', 'refinery'] },
+  { id: 'shaft', label: 'Shaft', ids: ['mine', 'shack', 'chapel'] },
+  { id: 'survive', label: 'Survive', ids: ['pump', 'ward', 'listening'] },
+];
+
+/** Coin shop sections. */
+export const UPGRADE_GROUPS = [
+  {
+    id: 'dig',
+    label: 'Digging',
+    ids: ['click_power', 'pick_tier', 'steel_tools', 'blast'],
+  },
+  { id: 'crew', label: 'Crew', ids: ['worker_speed', 'worker_energy'] },
+  {
+    id: 'industry',
+    label: 'Industry',
+    ids: ['mine_rate', 'smelt_rate', 'drill_coil', 'pump_coil'],
+  },
+  {
+    id: 'support',
+    label: 'Support',
+    ids: ['sell_bonus', 'focus_optics', 'bright_wards'],
+  },
+];
+
+/** ◆ shop sections. */
+export const SHARD_GROUPS = [
+  { id: 'power', label: 'Power', ids: ['perm_dig', 'perm_seal', 'perm_start'] },
+  { id: 'crew', label: 'Crew', ids: ['perm_cap', 'perm_vital'] },
+  { id: 'sense', label: 'Sense', ids: ['perm_sense'] },
+];
+
+export function resourceKeysOrdered() {
+  const keys = RESOURCE_GROUPS.flatMap((g) => g.keys);
+  for (const k of Object.keys(RESOURCE_META)) {
+    if (!keys.includes(k)) keys.push(k);
+  }
+  return keys;
+}
+
 /**
  * Surface Smelter recipes (tried in order each tick).
  * @type {{id:string, inputs:Record<string,number>, output:Record<string,number>, label:string}[]}
@@ -253,7 +310,7 @@ export const BUILDINGS = {
     role: 'Excavation',
     cost: { coins: 80, stone: 16, wood: 6 },
     blurb:
-      'Bores rock in a small radius. Prefers ore; otherwise eats stone/dirt. Does not need tiles pre-exposed. Green = working. Skips cube layers. Each extra drill costs more.',
+      'Bores rock in a small radius, prefers deeper tiles and ore, then creeps down the shaft as it clears. Does not need tiles pre-exposed. Skips cube layers. Each extra drill costs more.',
     color: '#5a5a68',
   },
   smelter: {
@@ -359,6 +416,7 @@ export const BUILDINGS = {
   },
 };
 
+/** Coin upgrades — order matches UPGRADE_GROUPS. */
 export const UPGRADES = [
   {
     id: 'click_power',
@@ -366,49 +424,6 @@ export const UPGRADES = [
     blurb: '+0.75 dig strength per level (fewer hits per block).',
     baseCost: 28,
     max: 10,
-  },
-  {
-    id: 'worker_speed',
-    name: 'Work boots',
-    blurb: 'Workers move and dig a bit faster.',
-    baseCost: 40,
-    max: 8,
-  },
-  {
-    id: 'worker_energy',
-    name: 'Packed lunch',
-    blurb: '+3 energy and a little max vitality per level.',
-    baseCost: 35,
-    max: 8,
-  },
-  {
-    id: 'blast',
-    name: 'Blast charges',
-    blurb: 'Chance to crack a neighbor tile on break.',
-    baseCost: 95,
-    max: 4,
-  },
-  {
-    id: 'mine_rate',
-    name: 'Deeper shafts',
-    blurb: 'Drills and grove houses work faster.',
-    baseCost: 65,
-    max: 6,
-  },
-  {
-    id: 'smelt_rate',
-    name: 'Hotter furnace',
-    blurb:
-      'Smelters and refineries craft faster (+30% speed per level). Stacks with building more plants.',
-    baseCost: 75,
-    max: 6,
-  },
-  {
-    id: 'sell_bonus',
-    name: 'Market tip',
-    blurb: '+8% village market sell prices per level.',
-    baseCost: 55,
-    max: 6,
   },
   {
     id: 'pick_tier',
@@ -428,12 +443,48 @@ export const UPGRADES = [
     needsSteel: true,
   },
   {
-    id: 'focus_optics',
-    name: 'Focus optics',
-    blurb: 'Slight Echo Sense sharpening (+pulse clarity). Needs crystal lenses from a Refinery.',
-    baseCost: 140,
-    max: 3,
-    needsLens: true,
+    id: 'blast',
+    name: 'Blast charges',
+    blurb: 'Chance to crack a neighbor tile on break.',
+    baseCost: 95,
+    max: 4,
+  },
+  {
+    id: 'worker_speed',
+    name: 'Work boots',
+    blurb: 'Workers move and dig a bit faster.',
+    baseCost: 40,
+    max: 8,
+  },
+  {
+    id: 'worker_energy',
+    name: 'Packed lunch',
+    blurb: '+3 energy and a little max vitality per level.',
+    baseCost: 35,
+    max: 8,
+  },
+  {
+    id: 'mine_rate',
+    name: 'Deeper shafts',
+    blurb: 'Drills and grove houses work faster.',
+    baseCost: 65,
+    max: 6,
+  },
+  {
+    id: 'smelt_rate',
+    name: 'Hotter furnace',
+    blurb:
+      'Smelters and refineries craft faster (+30% speed per level). Stacks with building more plants.',
+    baseCost: 75,
+    max: 6,
+  },
+  {
+    id: 'drill_coil',
+    name: 'Drill coils',
+    blurb: '+18% drill bore rate per level. Needs copper wire from a Refinery.',
+    baseCost: 110,
+    max: 4,
+    needsWire: true,
   },
   {
     id: 'pump_coil',
@@ -444,12 +495,19 @@ export const UPGRADES = [
     needsWire: true,
   },
   {
-    id: 'drill_coil',
-    name: 'Drill coils',
-    blurb: '+18% drill bore rate per level. Needs copper wire from a Refinery.',
-    baseCost: 110,
-    max: 4,
-    needsWire: true,
+    id: 'sell_bonus',
+    name: 'Market tip',
+    blurb: '+8% village market sell prices per level.',
+    baseCost: 55,
+    max: 6,
+  },
+  {
+    id: 'focus_optics',
+    name: 'Focus optics',
+    blurb: 'Slight Echo Sense sharpening (+pulse clarity). Needs crystal lenses from a Refinery.',
+    baseCost: 140,
+    max: 3,
+    needsLens: true,
   },
   {
     id: 'bright_wards',
@@ -463,7 +521,7 @@ export const UPGRADES = [
 
 /**
  * Permanent shard upgrades — first prestige buys Echo muscle (1◆).
- * Costs rise steeply; early levels are small, not a god run.
+ * Order matches SHARD_GROUPS.
  */
 export const SHARD_UPGRADES = [
   {
@@ -472,13 +530,6 @@ export const SHARD_UPGRADES = [
     blurb: 'Permanent +0.5 dig strength (caps early).',
     cost: 1,
     max: 6,
-  },
-  {
-    id: 'perm_cap',
-    name: 'Ghost bunks',
-    blurb: 'Permanent +1 worker cap.',
-    cost: 2,
-    max: 5,
   },
   {
     id: 'perm_seal',
@@ -493,6 +544,13 @@ export const SHARD_UPGRADES = [
     blurb: 'Start each run with a better pick tier / starter bars.',
     cost: 4,
     max: 3,
+  },
+  {
+    id: 'perm_cap',
+    name: 'Ghost bunks',
+    blurb: 'Permanent +1 worker cap.',
+    cost: 2,
+    max: 5,
   },
   {
     id: 'perm_vital',
@@ -1041,6 +1099,7 @@ export const WIKI_SECTIONS = [
       'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Listening Post / wards. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
+      'Menus: Build (Surface / Shaft / Survive), Market (by resource group), Crew, Shop (coin upgrades), Echo (prestige + ◆).',
     ],
   },
   {

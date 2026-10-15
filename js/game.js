@@ -1,5 +1,7 @@
 import {
   BUILDINGS,
+  BUILDING_GROUPS,
+  BAG_PINNED,
   CHAPEL_HEAL_PER_SEC,
   CHAPEL_RADIUS,
   ACHIEVEMENTS,
@@ -13,13 +15,16 @@ import {
   MAP_W,
   MONSTER,
   PUMP_RADIUS,
+  RESOURCE_GROUPS,
   RESOURCE_META,
   REFINE_RECIPES,
+  SHARD_GROUPS,
   SHARD_UPGRADES,
   SMELT_INTERVAL,
   SMELT_RECIPES,
   REFINE_INTERVAL,
   TILES,
+  UPGRADE_GROUPS,
   UPGRADES,
   VITALITY_DRAIN_PER_DIG,
   WARD_DPS,
@@ -3118,26 +3123,48 @@ function mineCandidates(bx, by, kinds) {
       const t = tileAt(state.world, bx + dx, by + dy);
       if (!t || !kinds.includes(t.id)) continue;
       if (!TILES[t.id]?.diggable) continue;
-      // Fog is fine — digAt(asMine) reveals the face. Prefer nearer tiles.
+      // Fog is fine — digAt(asMine) reveals the face.
       if (!canScratchTile(state, t.id)) continue;
       const fog = !isRevealed(state.world, t.x, t.y) ? 1 : 0;
-      list.push({ t, dist, id: t.id, fog });
+      // 0 = below, 1 = same row, 2 = above — sink first
+      const depthBand = t.y > by ? 0 : t.y === by ? 1 : 2;
+      list.push({ t, dist, id: t.id, fog, depthBand });
     }
   }
-  // Prefer ore value, then closer, then already-revealed (steady tunnel)
+  // Prefer below → deeper → ore value → same column → nearer → revealed
   list.sort(
     (a, b) =>
+      a.depthBand - b.depthBand ||
+      b.t.y - a.t.y ||
+      MINE_ORE.indexOf(b.id) - MINE_ORE.indexOf(a.id) ||
+      Math.abs(a.t.x - bx) - Math.abs(b.t.x - bx) ||
       a.dist - b.dist ||
-      a.fog - b.fog ||
-      MINE_ORE.indexOf(b.id) - MINE_ORE.indexOf(a.id)
+      a.fog - b.fog
   );
   return list;
+}
+
+/** Creep the drill one tile down into clear shaft when the column is open. */
+function tryCreepDrillDown(b) {
+  if (b.id !== 'mine') return false;
+  const nx = b.x;
+  const ny = b.y + 1;
+  if (ny >= MAP_H) return false;
+  if (ny <= state.world.surfaceY) return false;
+  if (state.buildings.some((o) => o.uid !== b.uid && o.x === nx && o.y === ny)) {
+    return false;
+  }
+  const t = tileAt(state.world, nx, ny);
+  if (!t || t.id !== 'empty') return false;
+  b.y = ny;
+  revealAround(state.world, b.x, b.y, 2);
+  return true;
 }
 
 function describeMineStatus(b) {
   if (b.id !== 'mine') return '';
   if (b.mineIdle || !b.mineTargetName) {
-    return 'Idle — nothing scratchable in bore range (place near stone/ore)';
+    return 'Idle — sinking / waiting for stone/ore below';
   }
   return `Boring ${b.mineTargetName} at (${b.mineTargetX},${b.mineTargetY})`;
 }
@@ -3150,7 +3177,7 @@ function stepBuildings(dt) {
     // Drills use coils; grove uses shafts; smelters/refineries tick inside tickSurfaceRefiner
     if (b.id === 'mine') b.t += dt * drillRate;
     else if (b.id !== 'smelter' && b.id !== 'refinery') b.t += dt * rate;
-    if (b.id === 'mine' && b.t >= 1.6) {
+    if (b.id === 'mine' && b.t >= 1.35) {
       b.t = 0;
       // Keep a pocket of vision around the rig so candidates stay findable
       revealAround(state.world, b.x, b.y, 2);
@@ -3158,7 +3185,7 @@ function stepBuildings(dt) {
       const fillers = ores.length ? [] : mineCandidates(b.x, b.y, MINE_FILLER);
       const pick = ores[0] || fillers[0] || null;
       if (pick) {
-        const power = ores.length ? digPower(state) * 0.55 : digPower(state) * 0.32;
+        const power = ores.length ? digPower(state) * 0.65 : digPower(state) * 0.4;
         const ok = digAt(pick.t.x, pick.t.y, power, { asMine: true });
         if (ok) {
           b.mineTargetName = TILES[pick.id]?.name || pick.id;
@@ -3167,17 +3194,24 @@ function stepBuildings(dt) {
           b.mineIdle = false;
           const short = TILES[pick.id]?.name || pick.id;
           fx.floatText(pick.t.x, pick.t.y, `⛏ ${short}`, '#c4a35a');
+          // After clearing below/beside, sink into open shaft when ready
+          if (pick.t.y >= b.y) tryCreepDrillDown(b);
         } else {
           b.mineTargetName = null;
           b.mineTargetX = null;
           b.mineTargetY = null;
           b.mineIdle = true;
+          tryCreepDrillDown(b);
         }
       } else {
         b.mineTargetName = null;
         b.mineTargetX = null;
         b.mineTargetY = null;
         b.mineIdle = true;
+        // Follow an existing shaft downward when the pocket is cleared
+        if (tryCreepDrillDown(b)) {
+          fx.floatText(b.x, b.y, '↓', '#8a9098');
+        }
       }
     }
     if (b.id === 'grove' && b.t >= GROVE_PLANT_INTERVAL) {
@@ -3286,6 +3320,331 @@ function centerCamera() {
   renderer.cam.zoom = 2.4;
 }
 
+function appendShopGroup(parent, label) {
+  const h = document.createElement('h3');
+  h.className = 'shop-group';
+  h.textContent = label;
+  parent.appendChild(h);
+  return h;
+}
+
+function renderBagBar() {
+  if (!els.bags) return;
+  els.bags.innerHTML = '';
+  for (const group of RESOURCE_GROUPS) {
+    const visible = group.keys.filter((k) => {
+      const n = state.bags[k] || 0;
+      if (n > 0) return true;
+      if (BAG_PINNED.includes(k)) return true;
+      return false;
+    });
+    if (!visible.length) continue;
+    const sep = document.createElement('li');
+    sep.className = 'bag-sep';
+    sep.textContent = group.label;
+    sep.setAttribute('aria-hidden', 'true');
+    els.bags.appendChild(sep);
+    for (const k of visible) {
+      const meta = RESOURCE_META[k];
+      if (!meta) continue;
+      const n = state.bags[k] || 0;
+      const li = document.createElement('li');
+      if (!n) li.classList.add('is-empty');
+      const a = document.createElement('span');
+      a.textContent = meta.name;
+      const b = document.createElement('strong');
+      b.textContent = String(n);
+      li.append(a, b);
+      els.bags.appendChild(li);
+    }
+  }
+}
+
+function makeBuildPlaceButton(b) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  const placeCost = nextBuildingCost(b.id);
+  const atCap = buildingAtCap(b.id);
+  const canBuild = !atCap && cheatCanAfford(placeCost);
+  const placeSelected = tool === b.id && !atCap;
+  btn.className =
+    'hot-slot' +
+    (placeSelected ? ' is-active' : '') +
+    (canBuild ? ' is-affordable' : ' is-locked');
+  btn.disabled = atCap || (!canBuild && tool !== b.id);
+  const costHtml = formatCostHtml(placeCost);
+  const ownedN = buildingCount(b.id);
+  const owned = ownedN > 0 ? ` ×${ownedN}` : '';
+  const roleLine = atCap
+    ? `max ${b.max}`
+    : canBuild
+      ? costHtml || b.role || ''
+      : costHtml;
+  btn.innerHTML = `<span class="slot-main"><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
+  bindTip(btn, b.name, b.blurb, () => {
+    const tipCost = formatCostHtml(nextBuildingCost(b.id));
+    const ok = cheatCanAfford(nextBuildingCost(b.id));
+    const n = buildingCount(b.id);
+    if (buildingAtCap(b.id)) {
+      return `At max (${b.max}) — no benefit from more` + (n ? ` · owned ${n}` : '');
+    }
+    return tipCost + (ok ? '' : ' · need resources') + (n ? ` · owned ${n}` : '');
+  });
+  btn.addEventListener('click', () => {
+    unlockAudio();
+    if (buildingAtCap(b.id)) {
+      setStatus(`${b.name} at max — cannot place more.`);
+      sfx.deny();
+      return;
+    }
+    tool = b.id;
+    selectedBuildingUid = null;
+    setDockPanel('build');
+    setStatusHtml(
+      `Place ${b.name} (${formatCostHtml(nextBuildingCost(b.id))}): ${b.blurb}`
+    );
+    renderUi();
+  });
+  return btn;
+}
+
+function renderBuildHotbar() {
+  if (!els.hotbar) return;
+  els.hotbar.innerHTML = '';
+  const listed = new Set();
+  for (const group of BUILDING_GROUPS) {
+    const defs = group.ids
+      .map((id) => BUILDINGS[id])
+      .filter((b) => b && isHotbarBuilding(b));
+    if (!defs.length) continue;
+    appendShopGroup(els.hotbar, group.label);
+    for (const b of defs) {
+      listed.add(b.id);
+      els.hotbar.appendChild(makeBuildPlaceButton(b));
+    }
+  }
+  // Any new hotbar building not yet grouped
+  for (const b of Object.values(BUILDINGS)) {
+    if (!isHotbarBuilding(b) || listed.has(b.id)) continue;
+    els.hotbar.appendChild(makeBuildPlaceButton(b));
+  }
+
+  const demoBtn = document.createElement('button');
+  demoBtn.type = 'button';
+  demoBtn.className =
+    'hot-slot is-danger' + (tool === 'demolish' ? ' is-active' : '');
+  demoBtn.innerHTML =
+    '<span class="slot-main"><span class="slot-name">Demolish</span></span><span class="slot-role">50% refund</span>';
+  bindTip(
+    demoBtn,
+    'Demolish',
+    'Click a building to remove it. Refunds 50% of what you paid. Village market / starter props cannot be demolished.'
+  );
+  demoBtn.addEventListener('click', () => {
+    unlockAudio();
+    tool = 'demolish';
+    selectedBuildingUid = null;
+    setDockPanel('build');
+    setStatus('Demolish mode: click a building to remove it (50% refund).');
+    renderUi();
+  });
+  els.hotbar.appendChild(demoBtn);
+}
+
+function appendCoinUpgradeRow(parent, u) {
+  const level = state.upgrades[u.id] || 0;
+  const row = document.createElement('div');
+  const info = document.createElement('div');
+  const h = document.createElement('h3');
+  h.textContent = `${u.name} (${level}/${u.max})`;
+  info.appendChild(h);
+  bindTip(row, u.name, u.blurb);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn shop-buy';
+  btn.style.width = 'auto';
+  btn.style.marginTop = '0';
+  if (level >= u.max) {
+    row.className = 'shop-row is-maxed is-locked';
+    btn.textContent = 'Max';
+    btn.disabled = true;
+    btn.classList.add('is-locked');
+  } else {
+    const cost = upgradeCost(u, level);
+    const barsNeed = u.needsBars ? 1 + level : 0;
+    const steelNeed = u.needsSteel ? 1 + level : 0;
+    const lensNeed = u.needsLens ? 1 + level : 0;
+    const wireNeed = u.needsWire ? 1 + level : 0;
+    const haveBars = state.bags.ironBar || 0;
+    const haveSteel = state.bags.steelBar || 0;
+    const haveLens = state.bags.crystalLens || 0;
+    const haveWire = state.bags.copperWire || 0;
+    const coinsOk = state.coins >= cost;
+    const barsOk = !u.needsBars || haveBars >= barsNeed;
+    const steelOk = !u.needsSteel || haveSteel >= steelNeed;
+    const lensOk = !u.needsLens || haveLens >= lensNeed;
+    const wireOk = !u.needsWire || haveWire >= wireNeed;
+    const affordable = coinsOk && barsOk && steelOk && lensOk && wireOk;
+    row.className = 'shop-row ' + (affordable ? 'is-affordable' : 'is-locked');
+    let label = `${cost}c`;
+    if (u.needsBars) label += ` +${barsNeed} bar${barsNeed > 1 ? 's' : ''}`;
+    if (u.needsSteel) label += ` +${steelNeed} steel`;
+    if (u.needsLens) label += ` +${lensNeed} lens${lensNeed > 1 ? 'es' : ''}`;
+    if (u.needsWire) label += ` +${wireNeed} wire`;
+    btn.textContent = label;
+    if (!affordable) {
+      btn.classList.add('is-locked');
+      const hints = [];
+      if (!coinsOk) hints.push('coins');
+      if (!barsOk) hints.push('iron bars');
+      if (!steelOk) hints.push('steel');
+      if (!lensOk) hints.push('lenses');
+      if (!wireOk) hints.push('wire');
+      const hint = document.createElement('p');
+      hint.className = 'shop-hint';
+      hint.textContent = `need ${hints.join(' · ')}`;
+      info.appendChild(hint);
+    } else {
+      btn.classList.add('is-affordable');
+    }
+    btn.addEventListener('click', () => {
+      const err = tryBuyUpgrade(state, u.id);
+      if (err) {
+        setStatus(err);
+        sfx.deny();
+      } else {
+        const next = state.upgrades[u.id] || 0;
+        setStatus(
+          next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Upgraded ${u.name}.`
+        );
+        sfx.buy();
+        save();
+      }
+      renderUi();
+    });
+  }
+  row.append(info, btn);
+  parent.appendChild(row);
+}
+
+function renderUpgradeShop() {
+  if (!els.upgrades) return;
+  els.upgrades.innerHTML = '';
+  const byId = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
+  const listed = new Set();
+  const maxed = [];
+  for (const group of UPGRADE_GROUPS) {
+    const active = [];
+    for (const id of group.ids) {
+      const u = byId[id];
+      if (!u) continue;
+      listed.add(id);
+      const level = state.upgrades[u.id] || 0;
+      if (level >= u.max) maxed.push(u);
+      else active.push(u);
+    }
+    if (!active.length) continue;
+    appendShopGroup(els.upgrades, group.label);
+    for (const u of active) appendCoinUpgradeRow(els.upgrades, u);
+  }
+  for (const u of UPGRADES) {
+    if (listed.has(u.id)) continue;
+    const level = state.upgrades[u.id] || 0;
+    if (level >= u.max) maxed.push(u);
+    else {
+      appendShopGroup(els.upgrades, 'Other');
+      appendCoinUpgradeRow(els.upgrades, u);
+    }
+  }
+  if (maxed.length) {
+    appendShopGroup(els.upgrades, 'Maxed');
+    for (const u of maxed) appendCoinUpgradeRow(els.upgrades, u);
+  }
+}
+
+function appendShardUpgradeRow(parent, u) {
+  const level = state.shardUpgrades[u.id] || 0;
+  const row = document.createElement('div');
+  const info = document.createElement('div');
+  const h = document.createElement('h3');
+  h.textContent = `${u.name} (${level}/${u.max})`;
+  info.appendChild(h);
+  bindTip(row, u.name, u.blurb);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn shop-buy';
+  btn.style.width = 'auto';
+  btn.style.marginTop = '0';
+  if (level >= u.max) {
+    row.className = 'shop-row is-maxed is-locked';
+    btn.textContent = 'Max';
+    btn.disabled = true;
+    btn.classList.add('is-locked');
+  } else {
+    const cost = shardUpgradeCost(u, level);
+    const affordable = state.shards >= cost;
+    row.className = 'shop-row ' + (affordable ? 'is-affordable' : 'is-locked');
+    btn.textContent = `${cost}◆`;
+    if (!affordable) {
+      btn.classList.add('is-locked');
+      const hint = document.createElement('p');
+      hint.className = 'shop-hint';
+      hint.textContent = 'need shards';
+      info.appendChild(hint);
+    } else {
+      btn.classList.add('is-affordable');
+    }
+    btn.addEventListener('click', () => {
+      const err = tryBuyShardUpgrade(state, u.id);
+      if (err) {
+        setStatus(err);
+        sfx.deny();
+      } else {
+        const next = state.shardUpgrades[u.id] || 0;
+        setStatus(
+          next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Bought ${u.name}.`
+        );
+        sfx.buy();
+      }
+      renderUi();
+      save();
+    });
+  }
+  row.append(info, btn);
+  parent.appendChild(row);
+}
+
+function renderShardShop() {
+  if (!els.shardUpgrades) return;
+  els.shardUpgrades.innerHTML = '';
+  const byId = Object.fromEntries(SHARD_UPGRADES.map((u) => [u.id, u]));
+  const listed = new Set();
+  const maxed = [];
+  for (const group of SHARD_GROUPS) {
+    const active = [];
+    for (const id of group.ids) {
+      const u = byId[id];
+      if (!u) continue;
+      listed.add(id);
+      const level = state.shardUpgrades[u.id] || 0;
+      if (level >= u.max) maxed.push(u);
+      else active.push(u);
+    }
+    if (!active.length) continue;
+    appendShopGroup(els.shardUpgrades, group.label);
+    for (const u of active) appendShardUpgradeRow(els.shardUpgrades, u);
+  }
+  for (const u of SHARD_UPGRADES) {
+    if (listed.has(u.id)) continue;
+    if ((state.shardUpgrades[u.id] || 0) >= u.max) maxed.push(u);
+    else appendShardUpgradeRow(els.shardUpgrades, u);
+  }
+  if (maxed.length) {
+    appendShopGroup(els.shardUpgrades, 'Maxed');
+    for (const u of maxed) appendShardUpgradeRow(els.shardUpgrades, u);
+  }
+}
+
 function renderUi() {
   // Hire not purchaseable / building at max → dig/chop
   syncHardCappedTool();
@@ -3319,29 +3678,7 @@ function renderUi() {
     }
   }
 
-  els.bags.innerHTML = '';
-  for (const [k, meta] of Object.entries(RESOURCE_META)) {
-    const n = state.bags[k] || 0;
-    if (
-      !n &&
-      k !== 'wood' &&
-      k !== 'stone' &&
-      k !== 'ironBar' &&
-      k !== 'copperBar' &&
-      k !== 'steelBar' &&
-      k !== 'copperWire'
-    ) {
-      continue;
-    }
-    const li = document.createElement('li');
-    if (!n) li.classList.add('is-empty');
-    const a = document.createElement('span');
-    a.textContent = meta.name;
-    const b = document.createElement('strong');
-    b.textContent = String(n);
-    li.append(a, b);
-    els.bags.appendChild(li);
-  }
+  renderBagBar();
 
   // Crew panel: hire worker
   if (els.crewHire) {
@@ -3398,222 +3735,9 @@ function renderUi() {
   renderBuildingOrdersPanel();
   renderMarketPanel();
 
-  // Build panel: placeables + demolish (starter village stays off the list)
-  // No slot numbers here — 1–5 are reserved for the bottom menu rail.
-  els.hotbar.innerHTML = '';
-  for (const b of Object.values(BUILDINGS)) {
-    if (!isHotbarBuilding(b)) continue;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    const placeCost = nextBuildingCost(b.id);
-    const atCap = buildingAtCap(b.id);
-    const canBuild = !atCap && cheatCanAfford(placeCost);
-    const placeSelected = tool === b.id && !atCap;
-    btn.className =
-      'hot-slot' +
-      (placeSelected ? ' is-active' : '') +
-      (canBuild ? ' is-affordable' : ' is-locked');
-    // At cap is hard-locked; temporary unaffordable stays clickable while selected
-    btn.disabled = atCap || (!canBuild && tool !== b.id);
-    const costHtml = formatCostHtml(placeCost);
-    const ownedN = buildingCount(b.id);
-    const owned = ownedN > 0 ? ` ×${ownedN}` : '';
-    const roleLine = atCap
-      ? `max ${b.max}`
-      : canBuild
-        ? costHtml || b.role || ''
-        : costHtml;
-    btn.innerHTML = `<span class="slot-main"><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
-    bindTip(btn, b.name, b.blurb, () => {
-      const tipCost = formatCostHtml(nextBuildingCost(b.id));
-      const ok = cheatCanAfford(nextBuildingCost(b.id));
-      const n = buildingCount(b.id);
-      if (buildingAtCap(b.id)) {
-        return `At max (${b.max}) — no benefit from more` + (n ? ` · owned ${n}` : '');
-      }
-      return (
-        tipCost +
-        (ok ? '' : ' · need resources') +
-        (n ? ` · owned ${n}` : '')
-      );
-    });
-    btn.addEventListener('click', () => {
-      unlockAudio();
-      if (buildingAtCap(b.id)) {
-        setStatus(`${b.name} at max — cannot place more.`);
-        sfx.deny();
-        return;
-      }
-      tool = b.id;
-      // Place mode — hide leftover smelter/refinery recipe strip
-      selectedBuildingUid = null;
-      setDockPanel('build');
-      setStatusHtml(
-        `Place ${b.name} (${formatCostHtml(nextBuildingCost(b.id))}): ${b.blurb}`
-      );
-      renderUi();
-    });
-    els.hotbar.appendChild(btn);
-  }
-
-  const demoBtn = document.createElement('button');
-  demoBtn.type = 'button';
-  demoBtn.className =
-    'hot-slot is-danger' + (tool === 'demolish' ? ' is-active' : '');
-  demoBtn.innerHTML =
-    '<span class="slot-main"><span class="slot-name">Demolish</span></span><span class="slot-role">click a building · 50% refund</span>';
-  bindTip(
-    demoBtn,
-    'Demolish',
-    'Click a building to remove it. Refunds 50% of what you paid to place it (coins and materials, rounded down). The village market and starter props cannot be demolished. Workers assigned to a demolished shack fall back to nearest / spawn.'
-  );
-  demoBtn.addEventListener('click', () => {
-    unlockAudio();
-    tool = 'demolish';
-    selectedBuildingUid = null;
-    setDockPanel('build');
-    setStatus('Demolish mode: click a building to remove it (50% refund).');
-    renderUi();
-  });
-  els.hotbar.appendChild(demoBtn);
-
-  els.upgrades.innerHTML = '';
-  for (const u of UPGRADES) {
-    const level = state.upgrades[u.id] || 0;
-    const row = document.createElement('div');
-    const info = document.createElement('div');
-    const h = document.createElement('h3');
-    h.textContent = `${u.name} (${level}/${u.max})`;
-    const p = document.createElement('p');
-    p.textContent = u.blurb;
-    info.append(h, p);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn shop-buy';
-    btn.style.width = 'auto';
-    btn.style.marginTop = '0';
-    if (level >= u.max) {
-      row.className = 'shop-row is-maxed is-locked';
-      btn.textContent = 'Max';
-      btn.disabled = true;
-      btn.classList.add('is-locked');
-    } else {
-      const cost = upgradeCost(u, level);
-      const barsNeed = u.needsBars ? 1 + level : 0;
-      const steelNeed = u.needsSteel ? 1 + level : 0;
-      const lensNeed = u.needsLens ? 1 + level : 0;
-      const wireNeed = u.needsWire ? 1 + level : 0;
-      const haveBars = state.bags.ironBar || 0;
-      const haveSteel = state.bags.steelBar || 0;
-      const haveLens = state.bags.crystalLens || 0;
-      const haveWire = state.bags.copperWire || 0;
-      const coinsOk = state.coins >= cost;
-      const barsOk = !u.needsBars || haveBars >= barsNeed;
-      const steelOk = !u.needsSteel || haveSteel >= steelNeed;
-      const lensOk = !u.needsLens || haveLens >= lensNeed;
-      const wireOk = !u.needsWire || haveWire >= wireNeed;
-      const affordable = coinsOk && barsOk && steelOk && lensOk && wireOk;
-      row.className = 'shop-row ' + (affordable ? 'is-affordable' : 'is-locked');
-      let label = `${cost}c`;
-      if (u.needsBars) label += ` +${barsNeed} bar${barsNeed > 1 ? 's' : ''}`;
-      if (u.needsSteel) label += ` +${steelNeed} steel`;
-      if (u.needsLens) label += ` +${lensNeed} lens${lensNeed > 1 ? 'es' : ''}`;
-      if (u.needsWire) label += ` +${wireNeed} wire`;
-      btn.textContent = label;
-      if (!affordable) {
-        btn.classList.add('is-locked');
-        const hints = [];
-        if (!coinsOk) hints.push('need coins');
-        if (!barsOk) hints.push(barsNeed <= 1 ? 'need iron bar' : `need ${barsNeed} iron bars`);
-        if (!steelOk) {
-          hints.push(steelNeed <= 1 ? 'need steel bar' : `need ${steelNeed} steel bars`);
-        }
-        if (!lensOk) {
-          hints.push(lensNeed <= 1 ? 'need crystal lens' : `need ${lensNeed} crystal lenses`);
-        }
-        if (!wireOk) {
-          hints.push(wireNeed <= 1 ? 'need copper wire' : `need ${wireNeed} copper wire`);
-        }
-        const hint = document.createElement('p');
-        hint.className = 'shop-hint';
-        hint.textContent = hints.join(' · ') || 'locked';
-        info.appendChild(hint);
-      } else {
-        btn.classList.add('is-affordable');
-      }
-      btn.addEventListener('click', () => {
-        const err = tryBuyUpgrade(state, u.id);
-        if (err) {
-          setStatus(err);
-          sfx.deny();
-        } else {
-          const next = (state.upgrades[u.id] || 0);
-          setStatus(
-            next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Upgraded ${u.name}.`
-          );
-          sfx.buy();
-          save();
-        }
-        renderUi();
-      });
-    }
-    row.append(info, btn);
-    els.upgrades.appendChild(row);
-  }
-
-  els.shardUpgrades.innerHTML = '';
-  for (const u of SHARD_UPGRADES) {
-    const level = state.shardUpgrades[u.id] || 0;
-    const row = document.createElement('div');
-    const info = document.createElement('div');
-    const h = document.createElement('h3');
-    h.textContent = `${u.name} (${level}/${u.max})`;
-    const p = document.createElement('p');
-    p.textContent = u.blurb;
-    info.append(h, p);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn shop-buy';
-    btn.style.width = 'auto';
-    btn.style.marginTop = '0';
-    if (level >= u.max) {
-      row.className = 'shop-row is-maxed is-locked';
-      btn.textContent = 'Max';
-      btn.disabled = true;
-      btn.classList.add('is-locked');
-    } else {
-      const cost = shardUpgradeCost(u, level);
-      const affordable = state.shards >= cost;
-      row.className = 'shop-row ' + (affordable ? 'is-affordable' : 'is-locked');
-      btn.textContent = `${cost}◆`;
-      if (!affordable) {
-        btn.classList.add('is-locked');
-        const hint = document.createElement('p');
-        hint.className = 'shop-hint';
-        hint.textContent = 'need shards';
-        info.appendChild(hint);
-      } else {
-        btn.classList.add('is-affordable');
-      }
-      btn.addEventListener('click', () => {
-        const err = tryBuyShardUpgrade(state, u.id);
-        if (err) {
-          setStatus(err);
-          sfx.deny();
-        } else {
-          const next = state.shardUpgrades[u.id] || 0;
-          setStatus(
-            next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Bought ${u.name}.`
-          );
-          sfx.buy();
-        }
-        renderUi();
-        save();
-      });
-    }
-    row.append(info, btn);
-    els.shardUpgrades.appendChild(row);
-  }
+  renderBuildHotbar();
+  renderUpgradeShop();
+  renderShardShop();
 
   const depthPct = Math.floor(depth * 100);
   const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
@@ -3922,148 +4046,164 @@ function tickMarketAutoSell() {
   return true;
 }
 
+function appendMarketRow(key, meta) {
+  const open = hasMarket();
+  const unit = resourceSellPrice(state, key);
+  if (unit <= 0) return;
+  const have = state.bags[key] || 0;
+  const keep = marketKeepAmount(key);
+  const auto = marketAutoOn(key);
+  const excess = Math.max(0, have - keep);
+  const ready = open && have > 0;
+  const row = document.createElement('div');
+  row.className =
+    'market-row' + (ready ? ' is-ready' : '') + (have <= 0 ? ' is-empty' : '');
+
+  const info = document.createElement('div');
+  info.className = 'market-meta';
+  const h = document.createElement('h3');
+  h.textContent = meta.name;
+  const p = document.createElement('p');
+  p.textContent =
+    `${unit}c · bag ${have}` + (auto && open ? ` · auto>${keep}` : '');
+  info.append(h, p);
+
+  const actions = document.createElement('div');
+  actions.className = 'market-actions';
+
+  const sellOne = document.createElement('button');
+  sellOne.type = 'button';
+  sellOne.className = 'btn' + (ready ? ' is-ready' : '');
+  sellOne.textContent = '1';
+  sellOne.disabled = !ready;
+  sellOne.title = `Sell 1 for ${unit}c`;
+  sellOne.addEventListener('click', () => {
+    unlockAudio();
+    doMarketSell(key, 1);
+  });
+
+  const sellAll = document.createElement('button');
+  sellAll.type = 'button';
+  sellAll.className = 'btn' + (ready ? ' is-ready' : '');
+  sellAll.textContent = 'All';
+  sellAll.disabled = !ready;
+  sellAll.title = have > 0 ? `Sell ${have} for ${have * unit}c` : 'Nothing to sell';
+  sellAll.addEventListener('click', () => {
+    unlockAudio();
+    doMarketSell(key, 'all');
+  });
+
+  const keepWrap = document.createElement('label');
+  keepWrap.className = 'market-keep';
+  keepWrap.title = 'Keep this many in the bag; Auto sells the rest';
+  const keepLabel = document.createElement('span');
+  keepLabel.textContent = 'keep';
+  const keepInput = document.createElement('input');
+  keepInput.type = 'number';
+  keepInput.min = '0';
+  keepInput.step = '1';
+  keepInput.className = 'market-keep-input';
+  keepInput.setAttribute('aria-label', `Keep ${meta.name}`);
+  keepInput.placeholder = String(keep);
+  if (Object.prototype.hasOwnProperty.call(marketKeepDraftByKey, key)) {
+    keepInput.value = marketKeepDraftByKey[key];
+  } else {
+    keepInput.value = '';
+  }
+  const showKeepAsPlaceholder = (n) => {
+    keepInput.value = '';
+    keepInput.placeholder = String(n);
+  };
+  const commitKeep = () => {
+    const raw = (marketKeepDraftByKey[key] ?? keepInput.value).trim();
+    delete marketKeepDraftByKey[key];
+    const n =
+      raw === '' || raw === '-'
+        ? marketKeepAmount(key)
+        : Math.max(0, Math.floor(Number(raw) || 0));
+    marketKeepByKey[key] = n;
+    showKeepAsPlaceholder(n);
+    saveMarketPrefs();
+    if (marketAutoOn(key) && tickMarketAutoSell()) {
+      lastShopSig = shopResourceSig();
+      renderUi();
+      return;
+    }
+    renderMarketPanel();
+  };
+  keepInput.addEventListener('input', () => {
+    marketKeepDraftByKey[key] = keepInput.value;
+  });
+  keepInput.addEventListener('blur', () => {
+    commitKeep();
+  });
+  keepInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      keepInput.blur();
+    }
+  });
+  keepWrap.append(keepLabel, keepInput);
+
+  const autoWrap = document.createElement('label');
+  autoWrap.className = 'market-auto' + (auto ? ' is-on' : '');
+  autoWrap.title = auto
+    ? excess > 0
+      ? `Auto on — will sell ${excess} above keep ${keep}`
+      : `Auto on — sells anything above keep ${keep}`
+    : `Auto-sell anything above keep ${keep}`;
+  const autoCheck = document.createElement('input');
+  autoCheck.type = 'checkbox';
+  autoCheck.className = 'market-auto-input';
+  autoCheck.checked = auto;
+  autoCheck.disabled = !open;
+  autoCheck.setAttribute('aria-label', `Auto-sell ${meta.name} above keep`);
+  const autoLabel = document.createElement('span');
+  autoLabel.textContent = 'Auto';
+  autoCheck.addEventListener('change', () => {
+    unlockAudio();
+    marketAutoByKey[key] = autoCheck.checked;
+    saveMarketPrefs();
+    if (autoCheck.checked && tickMarketAutoSell()) {
+      lastShopSig = shopResourceSig();
+      renderUi();
+      return;
+    }
+    renderMarketPanel();
+  });
+  autoWrap.append(autoCheck, autoLabel);
+
+  actions.append(sellOne, sellAll, keepWrap, autoWrap);
+  row.append(info, actions);
+  els.market.appendChild(row);
+}
+
 function renderMarketPanel() {
   if (!els.market || !els.marketHint) return;
   const open = hasMarket();
   els.marketHint.textContent = open
-    ? 'Sell bag stock for coins. Keep N + Auto sells surplus as it arrives. Bars pay more than raw ore.'
+    ? 'Sell by group. Keep N + Auto sells surplus. Empty stocks stay collapsed.'
     : 'Your village market should be at camp — sell resources here once it is open.';
   els.market.classList.toggle('is-disabled', !open);
   els.market.innerHTML = '';
 
-  for (const [key, meta] of Object.entries(RESOURCE_META)) {
-    const unit = resourceSellPrice(state, key);
-    if (unit <= 0) continue;
-    const have = state.bags[key] || 0;
-    const keep = marketKeepAmount(key);
-    const auto = marketAutoOn(key);
-    const excess = Math.max(0, have - keep);
-    const ready = open && have > 0;
-    const row = document.createElement('div');
-    row.className =
-      'market-row' + (ready ? ' is-ready' : '') + (have <= 0 ? ' is-empty' : '');
-
-    const info = document.createElement('div');
-    info.className = 'market-meta';
-    const h = document.createElement('h3');
-    h.textContent = meta.name;
-    const p = document.createElement('p');
-    p.textContent =
-      `${unit}c each · bag ${have}` +
-      (auto && open ? ` · auto keep ${keep}` : '');
-    info.append(h, p);
-
-    const actions = document.createElement('div');
-    actions.className = 'market-actions';
-
-    const sellOne = document.createElement('button');
-    sellOne.type = 'button';
-    sellOne.className = 'btn' + (ready ? ' is-ready' : '');
-    sellOne.textContent = '1';
-    sellOne.disabled = !ready;
-    sellOne.title = `Sell 1 for ${unit}c`;
-    sellOne.addEventListener('click', () => {
-      unlockAudio();
-      doMarketSell(key, 1);
+  for (const group of RESOURCE_GROUPS) {
+    const keys = group.keys.filter((key) => {
+      const meta = RESOURCE_META[key];
+      if (!meta || resourceSellPrice(state, key) <= 0) return false;
+      const have = state.bags[key] || 0;
+      // Stocked, pinned staples, autosell, or keep reserve
+      return (
+        have > 0 ||
+        BAG_PINNED.includes(key) ||
+        marketAutoOn(key) ||
+        marketKeepAmount(key) > 0
+      );
     });
-
-    const sellAll = document.createElement('button');
-    sellAll.type = 'button';
-    sellAll.className = 'btn' + (ready ? ' is-ready' : '');
-    sellAll.textContent = 'All';
-    sellAll.disabled = !ready;
-    sellAll.title = have > 0 ? `Sell ${have} for ${have * unit}c` : 'Nothing to sell';
-    sellAll.addEventListener('click', () => {
-      unlockAudio();
-      doMarketSell(key, 'all');
-    });
-
-    const keepWrap = document.createElement('label');
-    keepWrap.className = 'market-keep';
-    keepWrap.title = 'Keep this many in the bag; Auto sells the rest';
-    const keepLabel = document.createElement('span');
-    keepLabel.textContent = 'keep';
-    const keepInput = document.createElement('input');
-    keepInput.type = 'number';
-    keepInput.min = '0';
-    keepInput.step = '1';
-    keepInput.className = 'market-keep-input';
-    keepInput.setAttribute('aria-label', `Keep ${meta.name}`);
-    keepInput.placeholder = String(keep);
-    // Restore in-progress edit across panel rebuilds; otherwise empty + placeholder
-    if (Object.prototype.hasOwnProperty.call(marketKeepDraftByKey, key)) {
-      keepInput.value = marketKeepDraftByKey[key];
-    } else {
-      keepInput.value = '';
-    }
-    const showKeepAsPlaceholder = (n) => {
-      keepInput.value = '';
-      keepInput.placeholder = String(n);
-    };
-    const commitKeep = () => {
-      const raw = (marketKeepDraftByKey[key] ?? keepInput.value).trim();
-      delete marketKeepDraftByKey[key];
-      // Empty commit keeps the previous amount (placeholder)
-      const n =
-        raw === '' || raw === '-'
-          ? marketKeepAmount(key)
-          : Math.max(0, Math.floor(Number(raw) || 0));
-      marketKeepByKey[key] = n;
-      showKeepAsPlaceholder(n);
-      saveMarketPrefs();
-      // Autosell only after the field is no longer active
-      if (marketAutoOn(key) && tickMarketAutoSell()) {
-        lastShopSig = shopResourceSig();
-        renderUi();
-        return;
-      }
-      renderMarketPanel();
-    };
-    keepInput.addEventListener('input', () => {
-      marketKeepDraftByKey[key] = keepInput.value;
-    });
-    keepInput.addEventListener('blur', () => {
-      commitKeep();
-    });
-    keepInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        keepInput.blur();
-      }
-    });
-    keepWrap.append(keepLabel, keepInput);
-
-    const autoWrap = document.createElement('label');
-    autoWrap.className = 'market-auto' + (auto ? ' is-on' : '');
-    autoWrap.title = auto
-      ? excess > 0
-        ? `Auto on — will sell ${excess} above keep ${keep}`
-        : `Auto on — sells anything above keep ${keep}`
-      : `Auto-sell anything above keep ${keep}`;
-    const autoCheck = document.createElement('input');
-    autoCheck.type = 'checkbox';
-    autoCheck.className = 'market-auto-input';
-    autoCheck.checked = auto;
-    autoCheck.disabled = !open;
-    autoCheck.setAttribute('aria-label', `Auto-sell ${meta.name} above keep`);
-    const autoLabel = document.createElement('span');
-    autoLabel.textContent = 'Auto';
-    autoCheck.addEventListener('change', () => {
-      unlockAudio();
-      marketAutoByKey[key] = autoCheck.checked;
-      saveMarketPrefs();
-      if (autoCheck.checked && tickMarketAutoSell()) {
-        lastShopSig = shopResourceSig();
-        renderUi();
-        return;
-      }
-      renderMarketPanel();
-    });
-    autoWrap.append(autoCheck, autoLabel);
-
-    actions.append(sellOne, sellAll, keepWrap, autoWrap);
-    row.append(info, actions);
-    els.market.appendChild(row);
+    if (!keys.length) continue;
+    appendShopGroup(els.market, group.label);
+    keys.sort((a, b) => (state.bags[b] || 0) - (state.bags[a] || 0));
+    for (const key of keys) appendMarketRow(key, RESOURCE_META[key]);
   }
 }
 
@@ -4619,7 +4759,7 @@ function bindHelpTips() {
     });
   }
   if (prestige) {
-    bindTip(prestige, 'Prestige', () => {
+    bindTip(prestige, 'Echo · Prestige', () => {
       const depth = deepestClearedTowardCore(state.world);
       const depthPct = Math.floor(depth * 100);
       const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
@@ -5495,7 +5635,7 @@ function hideIntro(markSeen = true) {
 /** Status line always; story intro first, then start_chop tip if still needed. */
 function openOpeningGuidance() {
   setStatus(
-    'Chop, sell, dig, build. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆. Milestones under Prestige.'
+    'Chop, sell, dig, build. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆ (Echo menu).'
   );
   if (!isIntroSeen()) {
     showIntro();

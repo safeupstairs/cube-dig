@@ -105,21 +105,24 @@
           </section>
 
           <section class="panel" data-panel="upgrades" id="panel-upgrades" hidden>
-            <h2 class="panel-title panel-head">Upgrades</h2>
+            <h2 class="panel-title panel-head">Shop</h2>
             <div class="panel-body">
+              <p class="muted">Run upgrades — reset on prestige. Grouped by what they boost.</p>
               <div id="upgrades" class="shop-list"></div>
             </div>
           </section>
 
           <section class="panel" data-panel="prestige" id="panel-prestige" hidden>
             <h2 class="panel-title panel-head">
-              Prestige
+              Echo
               <button type="button" class="help-btn" id="help-prestige" aria-label="Prestige help">?</button>
             </h2>
             <div class="panel-body">
               <p id="prestige-blurb" class="muted prestige-status"></p>
-              <div id="shard-upgrades" class="shop-list"></div>
               <button type="button" id="prestige-btn" class="btn danger">Prestige</button>
+              <h3 class="panel-subtitle">◆ Shard upgrades</h3>
+              <p class="muted shop-lead">Permanent — survive prestige.</p>
+              <div id="shard-upgrades" class="shop-list"></div>
               <h3 class="panel-subtitle">Milestones</h3>
               <div id="achievements" class="achievements-list" aria-label="Milestones"></div>
               <div class="panel-section help-actions">
@@ -153,14 +156,14 @@
         </button>
         <button type="button" class="hot-slot" data-dock="upgrades">
           <span class="slot-key">4</span>
-          <span class="slot-name">Upgrades</span>
-          <span class="slot-role">shop</span>
+          <span class="slot-name">Shop</span>
+          <span class="slot-role">coins</span>
           <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="prestige">
           <span class="slot-key">5</span>
-          <span class="slot-name">Prestige</span>
-          <span class="slot-role">shards</span>
+          <span class="slot-name">Echo</span>
+          <span class="slot-role">◆ · reset</span>
           <span class="menu-badge" aria-hidden="true"></span>
         </button>
       </nav>

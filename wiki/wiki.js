@@ -748,7 +748,7 @@ function mechanicBody(id) {
         <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Harder tiles need Iron-bound pick / prestige softens.</p>
         <ul>
           <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
-          <li>${buildingLink('mine')} drills bore without needing exposure (fog OK).</li>
+          <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
           <li>Filters & headings live in Crew → Orders.</li>
         </ul>`;
     case 'prestige':
