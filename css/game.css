@@ -1694,10 +1694,17 @@ body {
 }
 
 @media (max-width: 900px) {
+  /* Fixed rail height — keep dock/content clear of the overlay */
   #app {
+    --menu-rail-h: 5.25rem;
     width: 100%;
     border-left: 0;
     border-right: 0;
+    /* border-box: padding reserves space inside 100% height for the fixed rail */
+    padding-bottom: calc(var(--menu-rail-h) + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .hud-top {
@@ -1721,24 +1728,58 @@ body {
   }
 
   .stage {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(240px, 50vh) minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    /* Allow dock to scroll; don't clip siblings / rail */
+    overflow: visible;
   }
 
   .canvas-wrap {
-    height: auto;
-    min-height: 240px;
+    /* Prefer ~40vh but yield space so dock + rail stay usable */
+    flex: 0 1 40vh;
+    height: 40vh;
+    max-height: 40vh;
+    min-height: 120px;
+    width: 100%;
   }
 
   .dock {
+    flex: 1 1 auto;
     border-left: 0;
     border-top: 3px solid #000;
     height: auto;
-    max-height: 42vh;
+    max-height: none;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Always-visible Option A menu — fixed above the fold */
+  .menu-rail {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    padding: 0.4rem 0.45rem;
+    padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+    box-shadow:
+      inset 0 1px 0 var(--brass-lo),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 -6px 18px rgba(0, 0, 0, 0.5);
   }
 
   .menu-rail .hot-slot {
-    min-width: 4.2rem;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    min-height: 3rem;
+    padding-left: 1.35rem;
   }
 
   .bag-bar {
