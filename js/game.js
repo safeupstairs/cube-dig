@@ -28,6 +28,7 @@ import {
   PRESTIGE_DEPTH_RATIO,
   PRESTIGE_MIN_COLUMNS,
   prestigeDepthShards,
+  tutorialById,
   scaleBuildingCost,
   shardUpgradeCost,
   upgradeCost,
@@ -117,6 +118,10 @@ const els = {
   endingClose: document.getElementById('ending-close'),
   intro: document.getElementById('intro'),
   introBegin: document.getElementById('intro-begin'),
+  tutorial: document.getElementById('tutorial'),
+  tutorialTitle: document.getElementById('tutorial-title'),
+  tutorialBody: document.getElementById('tutorial-body'),
+  tutorialOk: document.getElementById('tutorial-ok'),
   canvas: document.getElementById('world'),
   tip: document.getElementById('tip'),
   orders: document.getElementById('orders'),
@@ -185,8 +190,16 @@ let lastShopSig = '';
 /** Per-resource Market keep / auto-sell (survives panel re-renders + localStorage). */
 const marketKeepByKey = Object.create(null);
 const marketAutoByKey = Object.create(null);
-const MARKET_KEEP_DEFAULT = 0;
+/** In-progress keep field text — not applied to autosell until blur. */
+const marketKeepDraftByKey = Object.create(null);
+/** Default keep amount shown as input placeholder until the player commits a value. */
+const MARKET_KEEP_DEFAULT = 10;
 const MARKET_PREFS_KEY = 'cube-dig-market-prefs';
+
+function isEditingMarketKeep() {
+  const el = document.activeElement;
+  return !!(el && el.classList && el.classList.contains('market-keep-input'));
+}
 
 function loadMarketPrefs() {
   try {
@@ -645,7 +658,15 @@ function blankWeather() {
   };
 }
 
-function createRunState(prestige, shardUpgrades, echoes, shards, cleared, achievements) {
+function createRunState(
+  prestige,
+  shardUpgrades,
+  echoes,
+  shards,
+  cleared,
+  achievements,
+  tutorials
+) {
   const world = generateWorld(prestige, 42 + prestige * 17);
   const run = {
     // Earn coins at the market — no free hire on a fresh dig
@@ -671,9 +692,75 @@ function createRunState(prestige, shardUpgrades, echoes, shards, cleared, achiev
     floodDepth: 0,
     floodCols: new Float32Array(world.w),
     achievements: achievements && typeof achievements === 'object' ? { ...achievements } : {},
+    // One-shot tips — kept across prestige, wiped on hard reset only
+    tutorials: tutorials && typeof tutorials === 'object' ? { ...tutorials } : {},
   };
   placeStarterVillage(run);
   return run;
+}
+
+/** Pending tip ids while another modal is up (intro / tutorial). */
+let tutorialQueue = [];
+let tutorialOpen = false;
+
+function isIntroVisible() {
+  return !!(els.intro && !els.intro.classList.contains('hidden'));
+}
+
+function isTutorialVisible() {
+  return !!(els.tutorial && !els.tutorial.classList.contains('hidden'));
+}
+
+/** One-shot popup guidance. Survives prestige; only hard reset clears. */
+function showTutorial(id) {
+  if (!state) return false;
+  if (!state.tutorials) state.tutorials = {};
+  if (state.tutorials[id]) return false;
+  if (!tutorialById(id)) return false;
+  if (tutorialQueue.includes(id)) return true;
+  // Don't fight intro / an open tip — queue and show after dismiss
+  if (tutorialOpen || isIntroVisible() || isTutorialVisible()) {
+    tutorialQueue.push(id);
+    return true;
+  }
+  openTutorialPopup(id);
+  return true;
+}
+
+function openTutorialPopup(id) {
+  const tip = tutorialById(id);
+  if (!tip || !els.tutorial) return;
+  if (!state.tutorials) state.tutorials = {};
+  state.tutorials[id] = Date.now();
+  tutorialOpen = true;
+  if (els.tutorialTitle) els.tutorialTitle.textContent = tip.title || 'Tip';
+  if (els.tutorialBody) els.tutorialBody.textContent = tip.text;
+  els.tutorial.classList.remove('hidden');
+  els.tutorial.setAttribute('aria-hidden', 'false');
+  els.tutorialOk?.focus();
+  setStatus(`Tip: ${tip.title || tip.text}`);
+  sfx.reveal();
+  save();
+}
+
+function dismissTutorial() {
+  if (!els.tutorial) return;
+  els.tutorial.classList.add('hidden');
+  els.tutorial.setAttribute('aria-hidden', 'true');
+  tutorialOpen = false;
+  flushTutorialQueue();
+}
+
+/** Show next queued tip if nothing is blocking. */
+function flushTutorialQueue() {
+  if (tutorialOpen || isIntroVisible() || isTutorialVisible()) return;
+  while (tutorialQueue.length) {
+    const next = tutorialQueue.shift();
+    if (!state?.tutorials?.[next] && tutorialById(next)) {
+      openTutorialPopup(next);
+      return;
+    }
+  }
 }
 
 /** Unlock a sticky milestone (survives prestige; cleared on hard reset). */
@@ -701,6 +788,19 @@ function checkDepthAchievements() {
   if (seen.shell || seen.seal || seen.core) unlockAchievement('layer_shell');
   // Lava milestone can fire on fog reveal; aquifer/gas wait for a real breach
   if (seen.lava) unlockAchievement('biome_lava');
+}
+
+/** Tips when fog first reveals ore / hazards (one tip per call; rest wait for next beat). */
+function fireRevealTutorials() {
+  if (!state) return;
+  const seen = state.seenTypes || {};
+  if ((seen.coal || seen.iron || seen.gold || seen.crystal) && showTutorial('smelter_ore')) {
+    return;
+  }
+  if (seen.aquifer && showTutorial('aquifer_tip')) return;
+  if (seen.gas && showTutorial('gas_tip')) return;
+  if (seen.lava && showTutorial('lava_tip')) return;
+  if (canPrestigeWorld(state.world)) showTutorial('prestige_tip');
 }
 
 /** Surface pad open and free of buildings (sky row above surfaceY). */
@@ -965,6 +1065,7 @@ function serialize() {
       ? Array.from(ensureFloodCols())
       : undefined,
     achievements: { ...(state.achievements || {}) },
+    tutorials: { ...(state.tutorials || {}) },
   };
 }
 
@@ -1061,6 +1162,8 @@ function hydrate(data) {
     floodCols: null,
     achievements:
       data.achievements && typeof data.achievements === 'object' ? { ...data.achievements } : {},
+    tutorials:
+      data.tutorials && typeof data.tutorials === 'object' ? { ...data.tutorials } : {},
   };
   if (Array.isArray(data.floodCols) && data.floodCols.length === state.world.w) {
     state.floodCols = Float32Array.from(data.floodCols);
@@ -1289,6 +1392,12 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   }
   refreshSeenTypes();
   checkDepthAchievements();
+  // Ore tip from breaking; ambient reveal tips if no beat tip fired
+  let tipped = false;
+  if (was === 'iron' || was === 'gold' || was === 'coal' || was === 'crystal') {
+    tipped = showTutorial('smelter_ore');
+  }
+  if (!tipped) fireRevealTutorials();
   return true;
 }
 
@@ -1444,6 +1553,7 @@ function placeWorker(tx, ty) {
         : `Digger hired. Digging wears life — chapel heals; pumps fight floods; horrors hunt deep.`
     );
   }
+  showTutorial('crew_wood');
   renderUi();
 }
 
@@ -1655,6 +1765,7 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
       (range ? `Built ${def.name}. ${range}.` : `Built ${def.name}.`) + nextBit
     );
   }
+  if (id === 'grove') showTutorial('hire_digger');
   renderUi();
 }
 
@@ -2187,6 +2298,7 @@ function setWeatherPhase(phase) {
   } else if (phase === 'warn') {
     w.phaseDur = WEATHER.WARN_SEC;
     setStatus('Storm gathering… shaft pumps keep floodwater off diggers.');
+    showTutorial('rain_pump');
   } else {
     w.phaseDur = WEATHER.RAIN_MIN + Math.random() * (WEATHER.RAIN_MAX - WEATHER.RAIN_MIN);
     w.lightningT = WEATHER.LIGHTNING_CHECK_SEC;
@@ -2195,6 +2307,7 @@ function setWeatherPhase(phase) {
       Math.random() * (WEATHER.ATMOS_FLASH_MAX - WEATHER.ATMOS_FLASH_MIN);
     setStatus('Rain — water fills connected shafts from the bottom; flows under overhangs. New pits stay dry until rain or they connect.');
     if (state.buildings.some((b) => b.id === 'pump')) unlockAchievement('storm_ready');
+    showTutorial('rain_pump');
   }
   refreshWeatherHud();
 }
@@ -2794,8 +2907,17 @@ function doPrestige() {
   const keepShards = state.shards + depthGrant;
   const keepShardUp = { ...state.shardUpgrades };
   const keepAchievements = { ...(state.achievements || {}) };
+  const keepTutorials = { ...(state.tutorials || {}) };
   const cleared = state.cleared;
-  state = createRunState(next, keepShardUp, echoes, keepShards, cleared, keepAchievements);
+  state = createRunState(
+    next,
+    keepShardUp,
+    echoes,
+    keepShards,
+    cleared,
+    keepAchievements,
+    keepTutorials
+  );
   const startTier = keepShardUp.perm_start || 0;
   state.bags.wood = 4 + startTier * 2;
   state.bags.stone = 2 + startTier;
@@ -3118,9 +3240,84 @@ function renderUi() {
   els.prestigeBtn.classList.toggle('is-affordable', canPrestige);
   els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
   els.prestigeBtn.textContent = canPrestige ? 'Prestige — ready' : 'Prestige';
+  if (canPrestige) showTutorial('prestige_tip');
 
   renderAchievements();
+  refreshMenuBadges();
   updateWorldCursor();
+}
+
+/** True when the player can place at least one hotbar building. */
+function canAffordAnyBuilding() {
+  if (!state) return false;
+  for (const b of Object.values(BUILDINGS)) {
+    if (!isHotbarBuilding(b)) continue;
+    if (buildingAtCap(b.id)) continue;
+    if (cheatCanAfford(nextBuildingCost(b.id))) return true;
+  }
+  return false;
+}
+
+/** True when market is open and any bag stock can be sold. */
+function canSellAnything() {
+  if (!state || !hasMarket()) return false;
+  for (const key of Object.keys(RESOURCE_META)) {
+    if ((state.bags[key] || 0) <= 0) continue;
+    if (resourceSellPrice(state, key) > 0) return true;
+  }
+  return false;
+}
+
+/** True when a digger can be hired right now. */
+function canHireWorkerNow() {
+  if (!state) return false;
+  if (state.workers.length >= workerCap(state)) return false;
+  return cheats.freeBuild || state.coins >= nextWorkerCost(state);
+}
+
+/** True when any coin upgrade is affordable. */
+function canAffordAnyUpgrade() {
+  if (!state) return false;
+  for (const u of UPGRADES) {
+    const level = state.upgrades[u.id] || 0;
+    if (level >= u.max) continue;
+    const cost = upgradeCost(u, level);
+    if (state.coins < cost) continue;
+    if (u.needsBars) {
+      const barsNeed = 1 + level;
+      if ((state.bags.ironBar || 0) < barsNeed) continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/** True when any shard upgrade is affordable. */
+function canAffordAnyShardUpgrade() {
+  if (!state) return false;
+  for (const u of SHARD_UPGRADES) {
+    const level = state.shardUpgrades[u.id] || 0;
+    if (level >= u.max) continue;
+    if (state.shards >= shardUpgradeCost(u, level)) return true;
+  }
+  return false;
+}
+
+/** Red corner dots on footer tabs that have something to buy / sell / do. */
+function refreshMenuBadges() {
+  const rail = els.menuRail || document.getElementById('menu-rail');
+  if (!rail || !state) return;
+  const flags = {
+    build: canAffordAnyBuilding(),
+    market: canSellAnything(),
+    crew: canHireWorkerNow(),
+    upgrades: canAffordAnyUpgrade(),
+    prestige: canPrestigeWorld(state.world) || canAffordAnyShardUpgrade(),
+  };
+  for (const btn of rail.querySelectorAll('[data-dock]')) {
+    const id = btn.getAttribute('data-dock');
+    btn.classList.toggle('has-action', !!flags[id]);
+  }
 }
 
 function renderAchievements() {
@@ -3297,6 +3494,8 @@ function marketKeepAmount(key) {
  */
 function tickMarketAutoSell() {
   if (!hasMarket()) return false;
+  // Never sell while the player is still typing a keep amount (e.g. "1" of "13")
+  if (isEditingMarketKeep() || Object.keys(marketKeepDraftByKey).length) return false;
   let anyAuto = false;
   for (const k of Object.keys(marketAutoByKey)) {
     if (marketAutoByKey[k]) {
@@ -3323,6 +3522,7 @@ function tickMarketAutoSell() {
   }
   if (parts.length === 0) return false;
   setStatus(`Auto-sold ${parts.join(', ')} for ${totalCoins}c.`);
+  showTutorial('dig_stone');
   sfx.coin();
   save();
   return true;
@@ -3394,30 +3594,43 @@ function renderMarketPanel() {
     keepInput.min = '0';
     keepInput.step = '1';
     keepInput.className = 'market-keep-input';
-    keepInput.value = String(keep);
     keepInput.setAttribute('aria-label', `Keep ${meta.name}`);
-    const syncKeep = (refresh) => {
-      const n = Math.max(0, Math.floor(Number(keepInput.value) || 0));
+    keepInput.placeholder = String(keep);
+    // Restore in-progress edit across panel rebuilds; otherwise empty + placeholder
+    if (Object.prototype.hasOwnProperty.call(marketKeepDraftByKey, key)) {
+      keepInput.value = marketKeepDraftByKey[key];
+    } else {
+      keepInput.value = '';
+    }
+    const showKeepAsPlaceholder = (n) => {
+      keepInput.value = '';
+      keepInput.placeholder = String(n);
+    };
+    const commitKeep = () => {
+      const raw = (marketKeepDraftByKey[key] ?? keepInput.value).trim();
+      delete marketKeepDraftByKey[key];
+      // Empty commit keeps the previous amount (placeholder)
+      const n =
+        raw === '' || raw === '-'
+          ? marketKeepAmount(key)
+          : Math.max(0, Math.floor(Number(raw) || 0));
       marketKeepByKey[key] = n;
-      keepInput.value = String(n);
+      showKeepAsPlaceholder(n);
       saveMarketPrefs();
+      // Autosell only after the field is no longer active
       if (marketAutoOn(key) && tickMarketAutoSell()) {
         lastShopSig = shopResourceSig();
         renderUi();
         return;
       }
-      if (refresh) renderMarketPanel();
+      renderMarketPanel();
     };
-    // Persist while typing so bag-driven renderUi rebuilds don't wipe the draft.
     keepInput.addEventListener('input', () => {
-      const raw = keepInput.value;
-      if (raw === '' || raw === '-') {
-        marketKeepByKey[key] = 0;
-        return;
-      }
-      marketKeepByKey[key] = Math.max(0, Math.floor(Number(raw) || 0));
+      marketKeepDraftByKey[key] = keepInput.value;
     });
-    keepInput.addEventListener('change', () => syncKeep(true));
+    keepInput.addEventListener('blur', () => {
+      commitKeep();
+    });
     keepInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -3483,6 +3696,7 @@ function doMarketSell(key, amount) {
   const name = RESOURCE_META[key]?.name || key;
   noteMarketSale(key);
   setStatus(`Sold ${result.sold} ${name} for ${result.coins}c.`);
+  showTutorial('dig_stone');
   sfx.coin();
   save();
   renderUi();
@@ -3966,6 +4180,7 @@ function setDockPanel(id) {
     }
   }
   if (open) saveDockPanel(id);
+  refreshMenuBadges();
 
   // Dock is an overlay; keep a light resize pass for orientation / first paint.
   requestAnimationFrame(() => {
@@ -4007,7 +4222,8 @@ function bindMenuRail() {
       selectDockPanel(id);
     });
   }
-  setDockPanel(loadDockPanel());
+  // Fresh load / reload always starts with the dock closed
+  setDockPanel(null);
 }
 
 /** Map current client pointer to world hover (or clear if off-canvas). */
@@ -4366,9 +4582,11 @@ function loop(ts) {
       } else {
         // Life / energy meters tick without rebuilding the whole shop
         refreshCrewMeters();
+        refreshMenuBadges();
         if (refreshSeenTypes()) {
           // Fog just exposed a gated type — unlock dig filters without full shop rebuild
           if (selectedWorkerId) renderOrdersPanel();
+          fireRevealTutorials();
         }
         checkDepthAchievements();
       }
@@ -4639,6 +4857,21 @@ function hideIntro(markSeen = true) {
   els.intro.classList.add('hidden');
   els.intro.setAttribute('aria-hidden', 'true');
   if (markSeen) markIntroSeen();
+  // First tip only after the story intro is dismissed — never under/over it
+  showTutorial('start_chop');
+  flushTutorialQueue();
+}
+
+/** Status line always; story intro first, then start_chop tip if still needed. */
+function openOpeningGuidance() {
+  setStatus(
+    'Chop, sell, dig, build. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆. Milestones under Prestige.'
+  );
+  if (!isIntroSeen()) {
+    showIntro();
+    return;
+  }
+  showTutorial('start_chop');
 }
 
 function boot() {
@@ -4651,10 +4884,7 @@ function boot() {
   bindMenuRail();
   bindCheats();
   refreshWeatherHud();
-  setStatus(
-    'No starting coins — chop trees, sell at the market, then hire. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆. Milestones live under Prestige.'
-  );
-  if (!isIntroSeen()) showIntro();
+  openOpeningGuidance();
 
   window.addEventListener('resize', () => {
     renderer.resize();
@@ -4741,10 +4971,20 @@ function boot() {
   els.resetBtn.addEventListener('click', () => {
     if (confirm('Hard reset ALL progress including shards?')) {
       clearSave();
+      // Fresh tutorials — tips only return after hard reset
+      tutorialQueue = [];
+      tutorialOpen = false;
+      if (els.tutorial) {
+        els.tutorial.classList.add('hidden');
+        els.tutorial.setAttribute('aria-hidden', 'true');
+      }
       state = createRunState(0, blankShardUpgrades(), [], 0, false);
+      tool = null;
+      setDockPanel(null);
       centerCamera();
       renderUi();
-      setStatus('Fresh surface.');
+      openOpeningGuidance();
+      save();
     }
   });
   if (els.introBtn) {
@@ -4759,6 +4999,12 @@ function boot() {
       hideIntro(true);
     });
   }
+  if (els.tutorialOk) {
+    els.tutorialOk.addEventListener('click', () => {
+      unlockAudio();
+      dismissTutorial();
+    });
+  }
   els.endingClose.addEventListener('click', () => {
     els.ending.classList.add('hidden');
     els.ending.setAttribute('aria-hidden', 'true');
@@ -4767,6 +5013,10 @@ function boot() {
     if (e.key === 'Escape') {
       if (els.cheatPanel && !els.cheatPanel.classList.contains('hidden')) {
         setCheatPanelOpen(false);
+        return;
+      }
+      if (isTutorialVisible()) {
+        dismissTutorial();
         return;
       }
       if (els.intro && !els.intro.classList.contains('hidden')) {

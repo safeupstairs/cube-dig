@@ -924,6 +924,11 @@ body {
   -moz-appearance: textfield;
 }
 
+.market-keep-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
 .market-keep-input::-webkit-outer-spin-button,
 .market-keep-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -1207,6 +1212,27 @@ body {
 
 .menu-rail .hot-slot.is-active::before {
   box-shadow: inset 1px 1px 0 #fff0c0, 0 0 0 1px var(--brass), 1px 1px 0 #000;
+}
+
+/* Actionable panel ping — top-right corner of the rail button */
+.menu-rail .hot-slot .menu-badge {
+  display: none;
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #e04040;
+  box-shadow:
+    0 0 0 1px #1a1010,
+    0 0 6px rgba(224, 64, 64, 0.55);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.menu-rail .hot-slot.has-action .menu-badge {
+  display: block;
 }
 
 /* Legacy hotbar class kept for any leftover refs */
@@ -1688,6 +1714,40 @@ body {
 }
 
 .intro-card .btn {
+  margin-top: 0;
+}
+
+/* One-shot tutorial tips — same modal language as intro, slightly tighter */
+.tutorial {
+  z-index: 41;
+}
+
+.tutorial-card {
+  width: min(24rem, 92vw);
+}
+
+.tutorial-kicker {
+  margin: 0 0 0.35rem;
+  font-family: var(--pixel);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brass-hi);
+}
+
+.tutorial-card h2 {
+  margin-bottom: 0.5rem;
+}
+
+.tutorial-card #tutorial-body {
+  margin: 0 0 1rem;
+  white-space: normal;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.tutorial-card .btn {
   margin-top: 0;
 }
 

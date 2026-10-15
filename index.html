@@ -61,8 +61,8 @@
         <div class="canvas-wrap">
           <canvas id="world" width="960" height="640"></canvas>
         </div>
-        <aside class="dock" id="dock">
-          <section class="panel is-active-panel" data-panel="build" id="panel-build">
+        <aside class="dock is-closed" id="dock">
+          <section class="panel" data-panel="build" id="panel-build" hidden>
             <h2 class="panel-title panel-head">Buildings</h2>
             <div class="panel-body">
               <p class="muted">Pick a building, then click the map to place. Demolish refunds 50%.</p>
@@ -128,30 +128,35 @@
       </main>
 
       <nav class="menu-rail" id="menu-rail" aria-label="Menu">
-        <button type="button" class="hot-slot is-active" data-dock="build">
+        <button type="button" class="hot-slot" data-dock="build">
           <span class="slot-key">1</span>
           <span class="slot-name">Build</span>
           <span class="slot-role">place</span>
+          <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="market">
           <span class="slot-key">2</span>
           <span class="slot-name">Market</span>
           <span class="slot-role">sell</span>
+          <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="crew">
           <span class="slot-key">3</span>
           <span class="slot-name">Crew</span>
           <span class="slot-role">hire</span>
+          <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="upgrades">
           <span class="slot-key">4</span>
           <span class="slot-name">Upgrades</span>
           <span class="slot-role">shop</span>
+          <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="prestige">
           <span class="slot-key">5</span>
           <span class="slot-name">Prestige</span>
           <span class="slot-role">shards</span>
+          <span class="menu-badge" aria-hidden="true"></span>
         </button>
       </nav>
     </div>
@@ -189,6 +194,22 @@
           <p class="intro-tease">We'll see what happens after reaching the core.</p>
         </div>
         <button type="button" id="intro-begin" class="btn">Begin</button>
+      </div>
+    </div>
+
+    <div
+      id="tutorial"
+      class="ending tutorial hidden"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tutorial-title"
+    >
+      <div class="ending-card tutorial-card">
+        <p class="tutorial-kicker">Tip</p>
+        <h2 id="tutorial-title">Guidance</h2>
+        <p id="tutorial-body"></p>
+        <button type="button" id="tutorial-ok" class="btn">Got it</button>
       </div>
     </div>
 

@@ -769,6 +769,68 @@ export function achievementById(id) {
   return ACHIEVEMENTS.find((a) => a.id === id) || null;
 }
 
+/**
+ * One-shot guidance tips. Sticky across prestige; cleared only on hard reset.
+ * Early ladder: start_chop → dig_stone → hire_digger → crew_wood.
+ * Situational: rain / ore / biomes / prestige.
+ */
+export const TUTORIAL_TIPS = [
+  {
+    id: 'start_chop',
+    title: 'Chop wood',
+    text: 'You start with no coins. Chop trees on the sky pad, then sell wood at Market (2) for coins.',
+  },
+  {
+    id: 'dig_stone',
+    title: 'Grove next',
+    text: 'Dig down for stone, then place a Grove house on the surface (Build 1) for a steady tree supply.',
+  },
+  {
+    id: 'hire_digger',
+    title: 'Hire a digger',
+    text: 'Hire a digger in Crew (3). They chop and dig while you manage buildings and sales.',
+  },
+  {
+    id: 'crew_wood',
+    title: 'Steady wood income',
+    text: 'Put this digger on trees. In Market, turn Auto on for wood — Keep defaults to 10. Surplus sells while you keep a stockpile.',
+  },
+  {
+    id: 'rain_pump',
+    title: 'Storms & pumps',
+    text: 'Storm coming! Build a Shaft pump near the dig (Build) so floodwater does not drown your crew.',
+  },
+  {
+    id: 'smelter_ore',
+    title: 'Ore & smelters',
+    text: 'Ore! Place a Smelter on the surface to refine iron/gold into bars — bars sell for more and unlock Iron-bound pick.',
+  },
+  {
+    id: 'aquifer_tip',
+    title: 'Aquifer',
+    text: 'Aquifer ahead — breaching it floods the shaft. Keep a pump nearby before you dig it out.',
+  },
+  {
+    id: 'gas_tip',
+    title: 'Gas pocket',
+    text: 'Gas pocket — it explodes when breached. Pull diggers back, then crack it carefully.',
+  },
+  {
+    id: 'lava_tip',
+    title: 'Lava',
+    text: 'Lava — diggers burn if they stand beside it. Dig around the glow or clear a safe path.',
+  },
+  {
+    id: 'prestige_tip',
+    title: 'Prestige',
+    text: 'Prestige unlocks at 25% depth with a 3-wide shaft. Reset keeps ◆ shards forever (Prestige tab).',
+  },
+];
+
+export function tutorialById(id) {
+  return TUTORIAL_TIPS.find((t) => t.id === id) || null;
+}
+
 export const ENDING_TEXT = `Beneath the last seal there is no machine, no prize vault, no company memo.
 
 Only a small wooden cube — hand-carved, warm somehow — and a note burned into the grain:
