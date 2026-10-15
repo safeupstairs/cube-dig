@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Cube Dig</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="css/game.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="hud-top">
+        <div class="brand">
+          <h1>The Cube Dig</h1>
+          <p class="tag">Dig deep. Keep the crew alive. Crack the cube.</p>
+        </div>
+        <div class="inspect-slot">
+          <div id="inspect" class="inspect" aria-live="polite">
+            <span id="inspect-text" class="inspect-text">Hover a tile…</span>
+          </div>
+        </div>
+        <div class="meters">
+          <div class="meter" title="Coins">
+            <span class="label">Coins</span>
+            <strong id="stat-coins">0</strong>
+          </div>
+          <div class="meter" title="Cube Shards">
+            <span class="label">Shards</span>
+            <strong id="stat-shards">0</strong>
+          </div>
+          <div class="meter" title="Prestige level">
+            <span class="label">Prestige</span>
+            <strong id="stat-prestige">0</strong>
+          </div>
+          <div class="meter depth" title="Distance to core">
+            <span class="label">Depth</span>
+            <div class="depth-bar"><i id="depth-fill"></i></div>
+            <strong id="stat-depth">—</strong>
+          </div>
+          <div class="meter weather-meter" id="weather-meter" title="Surface weather — storms are rare">
+            <span class="label">Sky</span>
+            <strong id="stat-weather" class="weather-label">Clear</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="stage">
+        <div class="canvas-wrap">
+          <canvas id="world" width="960" height="640"></canvas>
+        </div>
+        <aside class="dock">
+          <section class="panel" data-panel="bags">
+            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Bags
+            </h2>
+            <div class="panel-body">
+              <ul id="bags" class="bags"></ul>
+            </div>
+          </section>
+          <section class="panel" id="market-panel" data-panel="market">
+            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Village market
+              <button type="button" class="help-btn" id="help-market" aria-label="Village market help">?</button>
+            </h2>
+            <div class="panel-body">
+              <p id="market-hint" class="muted">Sell bag stock for coins at the village market.</p>
+              <div id="market" class="market-list"></div>
+            </div>
+          </section>
+          <section class="panel" data-panel="tools">
+            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Tools
+            </h2>
+            <div class="panel-body">
+              <div id="tools" class="tool-grid"></div>
+            </div>
+          </section>
+          <section class="panel" id="orders-panel" data-panel="crew">
+            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Crew
+              <button type="button" class="help-btn" id="help-crew" aria-label="Crew help">?</button>
+            </h2>
+            <div class="panel-body">
+              <div id="crew" class="crew-list"></div>
+              <div class="panel-section">
+                <h2 class="subhead panel-title">
+                  Orders
+                  <button type="button" class="help-btn" id="help-orders" aria-label="Orders help">?</button>
+                </h2>
+                <p id="orders-hint" class="muted">Select a digger to set orders.</p>
+                <div id="orders" class="orders hidden"></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel" data-panel="upgrades">
+            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Upgrades
+            </h2>
+            <div class="panel-body">
+              <div id="upgrades" class="shop-list"></div>
+            </div>
+          </section>
+          <section class="panel" data-panel="prestige">
+            <h2 class="panel-title panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Prestige
+              <button type="button" class="help-btn" id="help-prestige" aria-label="Prestige help">?</button>
+            </h2>
+            <div class="panel-body">
+              <p id="prestige-blurb" class="muted prestige-status"></p>
+              <div id="shard-upgrades" class="shop-list"></div>
+              <button type="button" id="prestige-btn" class="btn danger">Prestige</button>
+            </div>
+          </section>
+          <section class="panel" data-panel="status">
+            <h2 class="panel-head" tabindex="0" role="button" aria-expanded="true">
+              <span class="panel-chevron" aria-hidden="true">▼</span>
+              Status
+            </h2>
+            <div class="panel-body">
+              <p id="status" class="status">Dig exposed blocks. Tunnel down through the fog.</p>
+              <button type="button" id="intro-btn" class="btn ghost">How to play</button>
+              <button type="button" id="reset-btn" class="btn ghost">Hard reset</button>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="hotbar" id="hotbar"></footer>
+    </div>
+
+    <div id="tip" class="tip hidden" role="tooltip" aria-hidden="true"></div>
+
+    <div id="ending" class="ending hidden" aria-hidden="true">
+      <div class="ending-card">
+        <h2>The Center</h2>
+        <p id="ending-text"></p>
+        <button type="button" id="ending-close" class="btn">Continue digging</button>
+      </div>
+    </div>
+
+    <div
+      id="intro"
+      class="ending intro hidden"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="intro-title"
+    >
+      <div class="ending-card intro-card">
+        <h2 id="intro-title">The Cube Dig</h2>
+        <div class="intro-body">
+          <p>
+            Something vast sleeps under the dirt — a buried cube older than the village. You dig.
+            The crew digs with you.
+          </p>
+          <p>
+            Break tiles for wood, stone, and ore. Your village market starts at camp — sell surplus
+            there for coins. Hire diggers, raise buildings, and push the shaft toward the core. Rare
+            storms flood open shafts — pumps help. Prestige when deep enough to keep ◆ shards forever.
+          </p>
+          <p class="intro-tease">We'll see what happens after reaching the core.</p>
+        </div>
+        <button type="button" id="intro-begin" class="btn">Begin</button>
+      </div>
+    </div>
+
+    <div id="cheat-panel" class="cheat-panel hidden" aria-hidden="true" role="dialog" aria-label="Debug cheats">
+      <div class="cheat-card">
+        <header class="cheat-head">
+          <h2>DEBUG / CHEATS</h2>
+          <span class="cheat-hint">` or F2 to close</span>
+        </header>
+        <div class="cheat-body">
+          <section class="cheat-sec">
+            <h3>Money</h3>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="coins-100">+100 coins</button>
+              <button type="button" class="cheat-btn" data-cheat="coins-1000">+1000 coins</button>
+              <button type="button" class="cheat-btn" data-cheat="coins-set">Set coins…</button>
+            </div>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="bags-fill">Fill bags</button>
+              <button type="button" class="cheat-btn" data-cheat="shards-5">+5 shards</button>
+              <button type="button" class="cheat-btn" data-cheat="shards-25">+25 shards</button>
+            </div>
+          </section>
+          <section class="cheat-sec">
+            <h3>Weather</h3>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="wx-clear">Clear</button>
+              <button type="button" class="cheat-btn" data-cheat="wx-warn">Storm warn</button>
+              <button type="button" class="cheat-btn" data-cheat="wx-rain">Rain</button>
+            </div>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="wx-next">Skip phase</button>
+              <button type="button" class="cheat-btn" data-cheat="flood-0">Flood 0</button>
+              <button type="button" class="cheat-btn" data-cheat="flood-high">Flood high</button>
+            </div>
+            <label class="cheat-toggle">
+              <input type="checkbox" id="cheat-pause-weather" />
+              Pause weather timer
+            </label>
+          </section>
+          <section class="cheat-sec">
+            <h3>Workers</h3>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="crew-heal">Heal crew</button>
+              <button type="button" class="cheat-btn" data-cheat="crew-spawn">Spawn free</button>
+            </div>
+          </section>
+          <section class="cheat-sec">
+            <h3>Progress</h3>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="fog-near">Reveal fog near cam</button>
+              <button type="button" class="cheat-btn" data-cheat="fog-deep">Reveal toward core</button>
+            </div>
+            <div class="cheat-row">
+              <button type="button" class="cheat-btn" data-cheat="prestige-1">+1 prestige</button>
+              <button type="button" class="cheat-btn" data-cheat="cam-deep">Cam to depth</button>
+            </div>
+          </section>
+          <section class="cheat-sec">
+            <h3>Build</h3>
+            <label class="cheat-toggle">
+              <input type="checkbox" id="cheat-free-build" />
+              Free build / hire (ignore costs)
+            </label>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/game.js"></script>
+  </body>
+</html>
