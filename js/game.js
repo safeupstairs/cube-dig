@@ -3559,7 +3559,7 @@ function saveDockPanel(id) {
   }
 }
 
-/** Open a dock panel, or pass null to collapse the dock (canvas takes the space). */
+/** Open a dock panel overlay, or pass null to hide it (canvas size stays stable). */
 function setDockPanel(id) {
   const open = id != null && DOCK_PANEL_IDS.includes(id);
   if (id != null && !open) return;
@@ -3584,7 +3584,7 @@ function setDockPanel(id) {
   }
   if (open) saveDockPanel(id);
 
-  // Layout width changes when the dock collapses/expands — reflow the dig canvas.
+  // Dock is an overlay; keep a light resize pass for orientation / first paint.
   requestAnimationFrame(() => {
     renderer.resize();
     refreshHoverAfterCamera();
