@@ -19,6 +19,7 @@ import {
   WEATHER,
   digFilterById,
   PRESTIGE_DEPTH_RATIO,
+  PRESTIGE_MIN_COLUMNS,
   prestigeDepthShards,
   scaleBuildingCost,
   shardUpgradeCost,
@@ -56,6 +57,10 @@ import { clearSave, loadSave, writeSave } from './save.js';
 import {
   deepestClearedTowardCore,
   deepestEmptyY,
+  canPrestigeWorld,
+  countColumnsOpenToDepth,
+  prestigeUnlockDepthY,
+  prestigeShaftBreadth,
   columnShaftFloor,
   columnOpenToSurface,
   findFloodBasins,
@@ -2505,8 +2510,19 @@ function stepBuildings(dt) {
 function doPrestige() {
   const progress = deepestClearedTowardCore(state.world);
   const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
+  const needY = prestigeUnlockDepthY(state.world);
+  const cols = countColumnsOpenToDepth(state.world, needY);
   if (progress < PRESTIGE_DEPTH_RATIO) {
-    setStatus(`Dig to ${needPct}% depth this run before prestiging.`);
+    setStatus(
+      `Dig to ${needPct}% depth this run before prestiging (need a ${PRESTIGE_MIN_COLUMNS}-wide shaft).`
+    );
+    sfx.deny();
+    return;
+  }
+  if (cols < PRESTIGE_MIN_COLUMNS) {
+    setStatus(
+      `Widen the shaft — need ${PRESTIGE_MIN_COLUMNS} open columns to ${needPct}% (have ${cols}).`
+    );
     sfx.deny();
     return;
   }
@@ -2529,7 +2545,8 @@ function doPrestige() {
   if (echoes.length > 40) echoes.splice(0, echoes.length - 40);
 
   const next = state.prestige + 1;
-  const depthGrant = prestigeDepthShards(progress);
+  const breadth = prestigeShaftBreadth(state.world);
+  const depthGrant = prestigeDepthShards(progress, breadth);
   const keepShards = state.shards + depthGrant;
   const keepShardUp = { ...state.shardUpgrades };
   const cleared = state.cleared;
@@ -2818,12 +2835,19 @@ function renderUi() {
 
   const depthPct = Math.floor(depth * 100);
   const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
-  const canPrestige = depth >= PRESTIGE_DEPTH_RATIO;
-  const previewGrant = prestigeDepthShards(depth);
+  const needY = prestigeUnlockDepthY(state.world);
+  const cols = countColumnsOpenToDepth(state.world, needY);
+  const canPrestige = canPrestigeWorld(state.world);
+  const breadth = prestigeShaftBreadth(state.world);
+  const previewGrant = prestigeDepthShards(depth, breadth);
   if (els.prestigeBlurb) {
-    els.prestigeBlurb.textContent = canPrestige
-      ? `Ready · depth ${depthPct}% · banks +${previewGrant}◆`
-      : `Depth ${depthPct}% · need ${needPct}% to prestige`;
+    if (canPrestige) {
+      els.prestigeBlurb.textContent = `Ready · depth ${depthPct}% · ${cols}-wide · banks +${previewGrant}◆`;
+    } else if (depth < PRESTIGE_DEPTH_RATIO) {
+      els.prestigeBlurb.textContent = `Depth ${depthPct}% · need ${needPct}% and a ${PRESTIGE_MIN_COLUMNS}-wide shaft`;
+    } else {
+      els.prestigeBlurb.textContent = `Depth ${depthPct}% · widen shaft ${cols}/${PRESTIGE_MIN_COLUMNS} columns`;
+    }
   }
   els.prestigeBtn.classList.toggle('is-affordable', canPrestige);
   els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
@@ -3520,6 +3544,10 @@ function bindHelpTips() {
       const depth = deepestClearedTowardCore(state.world);
       const depthPct = Math.floor(depth * 100);
       const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
+      const needY = prestigeUnlockDepthY(state.world);
+      const cols = countColumnsOpenToDepth(state.world, needY);
+      const breadth = prestigeShaftBreadth(state.world);
+      const grant = prestigeDepthShards(depth, breadth);
       const sealH = TILES.seal?.hardness ?? '?';
       const coreH = TILES.core?.hardness ?? '?';
       const shellH = TILES.shell?.hardness ?? '?';
@@ -3530,7 +3558,7 @@ function bindHelpTips() {
         },
         { text: `Seals need prestige ×1 or pick tier 2 (hardness ${sealH}). Core needs prestige ×5 (hardness ${coreH}).` },
         {
-          text: `Reach ${needPct}% depth this dig to unlock (now ${depthPct}%). Holding ◆ does not unlock prestige.`,
+          text: `Unlock: ${needPct}% depth and a ${PRESTIGE_MIN_COLUMNS}-wide open shaft to that line (now ${depthPct}%, ${cols}/${PRESTIGE_MIN_COLUMNS} cols). Wider digs bank more ◆ (preview +${grant}). Holding ◆ does not unlock prestige.`,
           muted: true,
         },
       ];

@@ -1,4 +1,11 @@
-import { CUBE_SHELL_R, MAP_H, MAP_W, TILES } from './data.js';
+import {
+  CUBE_SHELL_R,
+  MAP_H,
+  MAP_W,
+  PRESTIGE_DEPTH_RATIO,
+  PRESTIGE_MIN_COLUMNS,
+  TILES,
+} from './data.js';
 
 const IDS = [
   'empty',
@@ -860,6 +867,53 @@ export function deepestClearedTowardCore(world) {
   const coreY = world.cubeCy ?? world.centerY;
   const span = coreY - world.surfaceY;
   return Math.max(0, Math.min(1, (maxY - world.surfaceY) / Math.max(1, span)));
+}
+
+/** Y row that counts as the prestige depth gate (ceil of surface→core × ratio). */
+export function prestigeUnlockDepthY(world) {
+  const coreY = world.cubeCy ?? world.centerY;
+  const span = Math.max(1, coreY - world.surfaceY);
+  return world.surfaceY + Math.ceil(span * PRESTIGE_DEPTH_RATIO);
+}
+
+/** Empty shaft tiles strictly below the surface row (excludes camp pad empties on surfaceY). */
+export function countEmptyShaftTiles(world) {
+  let n = 0;
+  const { w, h, surfaceY, tiles, ids } = world;
+  for (let y = surfaceY + 1; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      if (ids[tiles[row + x]] === 'empty') n++;
+    }
+  }
+  return n;
+}
+
+/** Columns with contiguous empty from surface down through `y` (open rain shafts). */
+export function countColumnsOpenToDepth(world, y) {
+  let n = 0;
+  for (let x = 0; x < world.w; x++) {
+    if (columnOpenToSurface(world, x, y)) n++;
+  }
+  return n;
+}
+
+/**
+ * How wide the dig is vs a minimal PRESTIGE_MIN_COLUMNS shaft to the unlock depth.
+ * ~1.0 = exactly that 3-wide gate shaft; up to 2.0 for a broad dig.
+ */
+export function prestigeShaftBreadth(world) {
+  const needY = prestigeUnlockDepthY(world);
+  const spanTiles = Math.max(1, needY - world.surfaceY);
+  const ideal = spanTiles * PRESTIGE_MIN_COLUMNS;
+  return Math.max(0, Math.min(2, countEmptyShaftTiles(world) / ideal));
+}
+
+/** Depth gate + minimum open columns at that depth (no straw-shaft prestige). */
+export function canPrestigeWorld(world) {
+  if (deepestClearedTowardCore(world) < PRESTIGE_DEPTH_RATIO) return false;
+  const cols = countColumnsOpenToDepth(world, prestigeUnlockDepthY(world));
+  return cols >= PRESTIGE_MIN_COLUMNS;
 }
 
 export function hydrateWorld(data, prestige) {

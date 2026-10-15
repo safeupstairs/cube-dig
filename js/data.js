@@ -309,13 +309,24 @@ export function shardUpgradeCost(u, level) {
 export const PRESTIGE_DEPTH_RATIO = 0.25;
 
 /**
- * ◆ granted when prestiging from dig depth (mined seal/core shards kept separately).
- * Floor matches cheapest upgrade so a first 25% prestige can always buy Echo muscle.
- * Scale is intentionally lean — shell no longer floods ◆.
+ * Contiguous open columns required from surface down to the prestige depth line.
+ * Blocks 1-wide "straw" shafts — a real dig needs a ~3-wide shaft to that depth.
  */
-export function prestigeDepthShards(progress) {
+export const PRESTIGE_MIN_COLUMNS = 3;
+
+/**
+ * ◆ granted when prestiging from dig depth (mined seal/core shards kept separately).
+ * Floor matches cheapest upgrade so a proper first prestige can always buy Echo muscle.
+ * `breadth` (~1 for a minimal 3-wide shaft, up to 2 for a wide dig) scales the grant —
+ * depth alone no longer pays full ◆ for a needle hole.
+ * Scale is intentionally lean — shell no longer floods ◆.
+ * @param {number} progress 0–1 depth toward core
+ * @param {number} [breadth=1] shaft volume vs a 3-column gate shaft
+ */
+export function prestigeDepthShards(progress, breadth = 1) {
   const floor = cheapestShardCost();
-  return Math.max(floor, Math.floor(progress * 5));
+  const b = Math.max(0.35, Math.min(2, breadth));
+  return Math.max(floor, Math.floor(progress * 5 * b));
 }
 
 export const WORKER_BASE_COST = 14;
