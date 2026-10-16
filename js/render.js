@@ -1,12 +1,5 @@
 import { digFilterById, TILE, TILES } from './data.js';
-import {
-  drawBuildingSprite,
-  drawDiggerSprite,
-  drawHorrorSprite,
-  drawPineTreeSprite,
-  drawTombSprite,
-  pxRect as fillPxRect,
-} from './sprites.js';
+import { drawBuildingSprite, drawPineTreeSprite, pxRect as fillPxRect } from './sprites.js';
 import { isExposed, isRevealed } from './world.js';
 
 /**
@@ -19,7 +12,7 @@ export function createRenderer(canvas) {
   const cam = {
     x: 0,
     y: 0,
-    zoom: 3,
+    zoom: 2.4,
   };
 
   /** Simulation clock in ms. Frozen while the game is paused. */
@@ -76,19 +69,27 @@ export function createRenderer(canvas) {
     ctx.fillStyle = base;
     ctx.fillRect(px, py, cw, ch);
 
+    const cell = Math.max(2, Math.floor(tw / 8));
     const h0 = hash2(x, y);
-    // A few clumps, not a full checker — keeps tiles readable at a glance
-    ctx.fillStyle = edge;
-    const clump = (ox, oy, w, h) => {
-      ctx.fillRect(px + ox * cw, py + oy * ch, Math.max(2, cw * w), Math.max(2, ch * h));
-    };
-    if (h0 & 1) clump(0.15, 0.22, 0.22, 0.16);
-    if (h0 & 2) clump(0.55, 0.48, 0.28, 0.18);
-    if ((h0 & 4) && id !== 'grass') clump(0.3, 0.68, 0.18, 0.14);
+    // Checker dither midtones
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const bit = (h0 >> ((row * 4 + col) & 31)) & 1;
+        if (!bit) continue;
+        if (((x + col + y + row) & 1) === 0) continue;
+        ctx.fillStyle = edge;
+        ctx.fillRect(px + col * cell, py + row * cell, Math.max(1, cell - 1), Math.max(1, cell - 1));
+      }
+    }
+    // Highlight speckles
     const h1 = hash2(x * 3 + 7, y * 5 + 11);
-    ctx.fillStyle = hi;
-    if ((h1 & 3) === 0) clump(0.4, 0.18, 0.12, 0.1);
-    if ((h1 & 12) === 4) clump(0.62, 0.62, 0.14, 0.1);
+    for (let i = 0; i < 3; i++) {
+      if (((h1 >> (i * 5)) & 7) < 3) continue;
+      const sx = ((h1 >> (i * 3)) & 7) / 8;
+      const sy = ((h1 >> (i * 4 + 2)) & 7) / 8;
+      ctx.fillStyle = hi;
+      ctx.fillRect(px + sx * cw, py + sy * ch, Math.max(1, cell * 0.6), Math.max(1, cell * 0.6));
+    }
 
     // Beveled edges (stone / wood feel)
     ctx.fillStyle = hi;
@@ -134,56 +135,82 @@ export function createRenderer(canvas) {
     }
 
     if (id === 'grass') {
-      const sway = Math.sin(animNow / 420 + x * 0.7) * Math.max(1, cw * 0.06);
-      ctx.fillStyle = edge;
-      ctx.fillRect(px, py + ch * 0.42, cw, ch * 0.58);
+      // Tufts along the top edge
       ctx.fillStyle = hi;
-      ctx.fillRect(px + cw * 0.12 + sway, py, Math.max(2, cw * 0.1), Math.max(3, ch * 0.28));
-      ctx.fillRect(px + cw * 0.42, py + 1, Math.max(2, cw * 0.12), Math.max(3, ch * 0.32));
-      ctx.fillRect(px + cw * 0.7 - sway, py, Math.max(2, cw * 0.1), Math.max(3, ch * 0.24));
-      ctx.fillStyle = '#2a5a28';
-      ctx.fillRect(px + cw * 0.28, py + ch * 0.18, Math.max(1, cw * 0.06), Math.max(2, ch * 0.16));
-    }
-
-    if (id === 'sky') {
-      const drift = (animNow / 80 + x * 17) % (cw * 3);
-      const hsh = hash2(x, y);
-      if ((hsh & 7) === 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.28)';
-        const cx = px + ((hsh >> 4) & 7) * (cw / 8) - drift * 0.15;
-        ctx.fillRect(cx, py + ch * 0.25, Math.max(4, cw * 0.45), Math.max(2, ch * 0.16));
-        ctx.fillRect(cx + cw * 0.12, py + ch * 0.16, Math.max(3, cw * 0.22), Math.max(2, ch * 0.14));
-      }
+      ctx.fillRect(px + cw * 0.15, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.2));
+      ctx.fillRect(px + cw * 0.45, py, Math.max(1, cw * 0.1), Math.max(2, ch * 0.22));
+      ctx.fillRect(px + cw * 0.72, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.18));
+      ctx.fillStyle = edge;
+      ctx.fillRect(px, py + ch * 0.55, cw, ch * 0.45);
     }
   }
 
-  function drawPineTree(px, py, tw, seed) {
-    drawPineTreeSprite(ctx, px, py, tw, animNow / 220, seed);
+  function drawPineTree(px, py, tw) {
+    drawPineTreeSprite(ctx, px, py, tw);
   }
 
   function drawWorker(px, py, tw, wkr, selected, number = 0) {
     const tired = wkr.resting || wkr.energy <= 0;
     const hurt = (wkr.vitality || 0) > 0 && (wkr.vitality || 0) < 22;
     const blocked = !!wkr.jobBlocked && !tired;
+    const s = tw / 16;
+    // Working = on a dig job and standing at the face (not walking, not resting)
     const job = wkr.job;
     const atFace =
       !!job &&
       Math.hypot(job.standX + 0.5 - wkr.x, job.standY + 0.5 - wkr.y) < 0.55;
     const working = !tired && atFace;
-    const walking = !tired && !!job && !atFace && !wkr.resting;
-    const phase =
-      working || walking
-        ? (animNow / 220 + (wkr.uid?.length || 0) * 1.7) % (Math.PI * 2)
-        : 0;
-    drawDiggerSprite(ctx, px, py, tw, {
-      tired,
-      hurt,
-      blocked,
-      working,
-      walking,
-      phase,
-      selected,
-    });
+    // Looping dig cycle: swing → impact flash → recover
+    const phase = working
+      ? (animNow / 220 + (wkr.uid?.length || 0) * 1.7) % (Math.PI * 2)
+      : 0;
+    const swing = working ? Math.sin(phase) : 0;
+    const bobY = working ? Math.abs(Math.sin(phase * 2)) * 1.2 : 0;
+    const impact = working && swing > 0.72;
+    // Soft amber tint when orders can't find a dig
+    const body = tired ? '#6a6a6a' : hurt ? '#c4a090' : blocked ? '#d8c070' : '#e8d4a8';
+    const tunic = tired ? '#4a4a5a' : blocked ? '#5a4a28' : '#3a5a8a';
+    const hat = tired ? '#7a7a50' : '#d4b830';
+
+    if (selected) {
+      ctx.strokeStyle = '#e8d48a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 1, py + 1, tw - 2, tw - 2);
+      ctx.lineWidth = 1;
+    }
+    // Hard hat + face (bobs while digging)
+    pxRect(px, py, 5 * s, (2 - bobY) * s, 6 * s, 2 * s, hat);
+    pxRect(px, py, 4 * s, (3 - bobY) * s, 8 * s, 1 * s, hat);
+    pxRect(px, py, 5 * s, (4 - bobY) * s, 6 * s, 3 * s, body);
+    // Eyes
+    if (!tired) {
+      pxRect(px, py, 6 * s, (5 - bobY) * s, 1 * s, 1 * s, '#1a1a1a');
+      pxRect(px, py, 9 * s, (5 - bobY) * s, 1 * s, 1 * s, '#1a1a1a');
+    }
+    // Overalls
+    pxRect(px, py, 4 * s, (7 - bobY) * s, 8 * s, 6 * s, tunic);
+    pxRect(px, py, 5 * s, (8 - bobY) * s, 2 * s, 3 * s, '#2a3a5a');
+    pxRect(px, py, 9 * s, (8 - bobY) * s, 2 * s, 3 * s, '#2a3a5a');
+    pxRect(px, py, 5 * s, 13 * s, 2 * s, 2 * s, '#2a2a2a');
+    pxRect(px, py, 9 * s, 13 * s, 2 * s, 2 * s, '#2a2a2a');
+    if (!tired) {
+      // Pick / axe — swings when working, idle hold otherwise
+      const toolX = working ? 10 + swing * 3.2 : 11;
+      const toolY = working ? 5 - bobY - swing * 2.4 : 7;
+      const headX = working ? 9 + swing * 4.5 : 10;
+      const headY = working ? 3.5 - bobY - swing * 3.2 : 6;
+      const shaftH = working ? 4 + Math.abs(swing) * 1.5 : 5;
+      pxRect(px, py, toolX * s, toolY * s, 1 * s, shaftH * s, '#c4a35a');
+      pxRect(px, py, headX * s, headY * s, 4 * s, 2 * s, impact ? '#e8e0c8' : '#6a6a6a');
+      // Brief tool flash on impact peak
+      if (impact) {
+        pxRect(px, py, (headX + 1) * s, (headY - 1) * s, 2 * s, 1 * s, '#fff8e0');
+        pxRect(px, py, (headX + 3.5) * s, (headY + 0.5) * s, 1.5 * s, 1 * s, '#d8c898');
+      }
+    }
+    if (hurt) {
+      pxRect(px, py, 6 * s, (5 - bobY) * s, 1 * s, 1 * s, '#c45c4a');
+    }
     if (number > 0) {
       ctx.fillStyle = '#111';
       ctx.fillRect(px + tw * 0.28, py, tw * 0.44, tw * 0.22);
@@ -214,15 +241,27 @@ export function createRenderer(canvas) {
   }
 
   function drawMonster(px, py, tw, m) {
-    drawHorrorSprite(ctx, px, py, tw, animNow / 220 + (m.x || 0));
+    const s = tw / 16;
+    const pulse = 0.5 + 0.5 * Math.sin(animNow / 280 + (m.x || 0));
+    pxRect(px, py, 3 * s, 5 * s, 10 * s, 8 * s, '#2a1820');
+    pxRect(px, py, 4 * s, 4 * s, 8 * s, 3 * s, '#3a2030');
+    pxRect(px, py, 5 * s, 6 * s, 2 * s, 2 * s, pulse > 0.5 ? '#c45c4a' : '#8a3028');
+    pxRect(px, py, 9 * s, 6 * s, 2 * s, 2 * s, pulse > 0.5 ? '#c45c4a' : '#8a3028');
+    pxRect(px, py, 6 * s, 10 * s, 4 * s, 1 * s, '#5a2030');
+    pxRect(px, py, 4 * s, 13 * s, 2 * s, 2 * s, '#1a1014');
+    pxRect(px, py, 10 * s, 13 * s, 2 * s, 2 * s, '#1a1014');
   }
 
   function drawTombstone(px, py, tw) {
-    drawTombSprite(ctx, px, py, tw);
+    const s = tw / 16;
+    pxRect(px, py, 5 * s, 4 * s, 6 * s, 10 * s, '#4a4a52');
+    pxRect(px, py, 4 * s, 5 * s, 8 * s, 2 * s, '#5a5a62');
+    pxRect(px, py, 6 * s, 7 * s, 4 * s, 1 * s, '#2a2a30');
+    pxRect(px, py, 7 * s, 9 * s, 2 * s, 3 * s, '#2a2a30');
   }
 
   function drawBuilding(px, py, tw, b) {
-    drawBuildingSprite(ctx, px, py, tw, { ...b, outline: false, t: animNow / 220 });
+    drawBuildingSprite(ctx, px, py, tw, { ...b, outline: false });
   }
 
   /** Thin craft progress bar above smelters / refineries while working. */
@@ -501,7 +540,7 @@ export function createRenderer(canvas) {
 
         // Trees sit on the sky pad — pine silhouette (sky shows through)
         if (id === 'tree') {
-          drawPineTree(px, py, tw, x);
+          drawPineTree(px, py, tw);
         } else {
           drawTexturedTile(px, py, cw, ch, tw, x, y, def, id);
         }
@@ -817,16 +856,11 @@ export function createRenderer(canvas) {
     }
 
     if (hover && isRevealed(world, hover.x, hover.y)) {
-      const placeSpan = typeof opts === 'object' && opts ? opts.placeSpan || 0 : 0;
-      const placeSurface = typeof opts === 'object' && opts ? !!opts.placeSurface : false;
-      const hy = placeSpan && placeSurface ? world.surfaceY - 1 : hover.y;
-      const hx = hover.x;
-      const span = placeSpan || 1;
-      const s = worldToScreen(hx, hy, shake);
+      const s = worldToScreen(hover.x, hover.y, shake);
       const exposed = isExposed(world, hover.x, hover.y);
-      ctx.strokeStyle = placeSpan ? '#e8d48a' : exposed ? '#e8d48a' : '#666';
+      ctx.strokeStyle = exposed ? '#e8d48a' : '#666';
       ctx.lineWidth = 2;
-      ctx.strokeRect(s.x + 1, s.y + 1, tw * span - 2, tw - 2);
+      ctx.strokeRect(s.x + 1, s.y + 1, tw - 2, tw - 2);
       ctx.lineWidth = 1;
     }
 
