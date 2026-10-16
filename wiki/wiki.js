@@ -433,6 +433,7 @@ function pageHome() {
       <p>
         Later, smelt ore at a ${buildingLink('smelter')}. Iron-bound pick level 6 scratches a seal; Steel tools only speed the hits.
         ${link('#/mechanic/prestige', 'Prestige')} is in Echo at ${Math.round(PRESTIGE_DEPTH_RATIO * 100)}% depth with a ${PRESTIGE_MIN_COLUMNS}-wide shaft.
+        Echo lists the ◆ that reset pays — deeper and wider shafts pay more. The next dig starts with 4 ${itemLink('wood')} and 2 ${itemLink('stone')}.
       </p>
     </section>
     <div class="wiki-toc">
@@ -773,7 +774,7 @@ function mechanicBody(id) {
         <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, and shell need Iron-bound pick before they can be scratched. A seal needs Iron-bound pick level 6 (Seal splitter or Inheritance can lower that). Steel tools only speed the hits. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
           <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). The status line is the next step and does not follow the pointer.</li>
-          <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
+          <li>Drag diggers on the map. After resting at a shack, they return to their last dig stand; tree cutters walk to the nearest tree.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
           <li>Filters & headings live in Crew → Orders.</li>
         </ul>`;
@@ -796,7 +797,7 @@ function mechanicBody(id) {
         </ul>`;
     case 'crew':
       return `
-        <p>Hire diggers (cap from shacks + shards). New hires start <strong>Idle</strong> until you set a dig target. Energy restores at rest; vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality. Diggers return to the face they left; tree cutters walk to the nearest tree instead.</p>
+        <p>Hire diggers (cap from shacks + shards). New hires start <strong>Idle</strong> until you set a dig target. Out of energy, they walk to their shack (or the cottage) and refill only once they arrive. Vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality while they rest in range. After that, diggers return to the face they left; tree cutters walk to the nearest tree instead.</p>
         <p>A Seal or Core order will not swing at a face the pick cannot scratch. The status bar and the selected digger’s orders name the missing Iron-bound level (6 with no shards). Steel tools do not open it.</p>
         <h3>Filters</h3>
         <ul>${DIG_FILTERS.map((f) => `<li><strong>${esc(f.label)}</strong> — ${esc(f.blurb)}</li>`).join('')}</ul>
@@ -850,7 +851,7 @@ function mechanicBody(id) {
         <p>Build a ${buildingLink('listening')} for Echo Sense tier 1: a wide pulse that contains the cube somewhere inside it (not at the center), plus a rough camp bearing. No fog clear.</p>
         <ul>
           <li>${link('#/shard/perm_sense', 'Echo Sense')} shard upgrades shrink that region. The cube stays inside.</li>
-          <li>${link('#/upgrade/focus_optics', 'Focus optics')} needs ${itemLink('crystalLens')}.</li>
+          <li>${link('#/upgrade/focus_optics', 'Focus optics')} shrinks the region a little more. Needs ${itemLink('crystalLens')}.</li>
           <li>Toward core stays locked in Crew until fog reveals the core tile. Echo Sense does not unlock it.</li>
         </ul>`;
     default:

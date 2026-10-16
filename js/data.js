@@ -1139,7 +1139,7 @@ export const WIKI_SECTIONS = [
       'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
       'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. The status line stays on the next step while you hover. A sale, a storm, or a seal the pick cannot scratch borrows that line, then the step returns.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
-      'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Hard reset clears everything including tips.',
+      'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Buying Inheritance adds its wood and stone to this dig as well (iron bars from level 2). Hard reset clears everything including tips.',
       'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
       'Drag diggers on the map to reposition them. After resting they return to their last dig stand. Pause (HUD or Space) freezes the simulation and digging — crew, monsters, plants, weather, and floods stay still. Building, hiring, and selling still work.',
     ],
