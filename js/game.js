@@ -532,6 +532,35 @@ function scratchBlockStatus(tileId) {
   return lines.map((l) => l.text).join('. ');
 }
 
+/** Seal/core order the digger cannot scratch yet — null if the order is something else. */
+function orderScratchStatus(w) {
+  const filter = digFilterById(w.digFilter || 'auto');
+  if (!filter.match) return null;
+  for (const id of filter.match) {
+    if (id !== 'seal' && id !== 'core') continue;
+    const gate = cubeLayerGateReason(id);
+    if (gate) return gate;
+    const why = scratchBlockStatus(id);
+    if (why) return why;
+  }
+  return null;
+}
+
+/** Short crew-chip line for the same block. */
+function orderScratchShort(w) {
+  const filter = digFilterById(w.digFilter || 'auto');
+  if (!filter.match) return null;
+  for (const id of filter.match) {
+    if (id !== 'seal' && id !== 'core') continue;
+    if (cubeLayerGateReason(id)) return 'Locked';
+    if (canDigHardness(id)) continue;
+    const plan = scratchPlan(id);
+    if (plan.opensWithPick) return `Need Iron-bound ${plan.target}`;
+    return 'Need Seal splitter';
+  }
+  return null;
+}
+
 /** Cube-layer facts for the hover toolbox (not the inspect plaque). */
 function cubeTipLines(tileId) {
   const shards = TILES[tileId]?.shards;
@@ -951,6 +980,7 @@ function fireRevealTutorials() {
   if (seen.aquifer && showTutorial('aquifer_tip')) return;
   if (seen.gas && showTutorial('gas_tip')) return;
   if (seen.lava && showTutorial('lava_tip')) return;
+  if (seen.seal && showTutorial('seal_tip')) return;
   if (canPrestigeWorld(state.world)) showTutorial('prestige_tip');
 }
 
@@ -1496,9 +1526,12 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   if (t.id === 'seal' || t.id === 'core') {
     const need = digHardnessNeed(t.id);
     if (maxHardness(state) < need * 0.35) {
+      const why = scratchBlockStatus(t.id) || 'Pick too weak';
       if (fromPlayer) {
-        setStatus(scratchBlockStatus(t.id) || 'Pick too weak');
+        setStatus(why);
         sfx.deny();
+      } else if (!asMine) {
+        setStatus(why);
       }
       return false;
     }
@@ -2883,10 +2916,16 @@ function stepWorkers(dt) {
     // No matching/reachable dig for current filter (or pick too weak / flooded stands only)
     w.jobBlocked = !w.job;
     if (!w.job) {
+      const why = orderScratchStatus(w);
+      if (why && w.scratchTold !== why) {
+        w.scratchTold = why;
+        setStatus(why);
+      }
       const home = restTargetFor(w);
       moveWorkerAlongShaft(w, home.x, home.y, speed, dt);
       continue;
     }
+    w.scratchTold = null;
 
     const standX = w.job.standX;
     const standY = w.job.standY;
@@ -3096,8 +3135,10 @@ function pickJob(w) {
   const bias = headingScoreBias(heading, sy);
   const canMine = (id) => {
     if (!TILES[id]?.diggable) return false;
-    if (id === 'core') return state.prestige >= 5;
-    if (id === 'seal') return state.prestige >= 1 || (state.upgrades.pick_tier || 0) >= 2;
+    if (id === 'seal' || id === 'core') {
+      if (cubeLayerGateReason(id)) return false;
+      return canDigHardness(id);
+    }
     return canScratchTile(state, id);
   };
   const pred = (id) => {
@@ -4025,7 +4066,7 @@ function focusWorker(w) {
 function crewStateLabel(w) {
   if (w.resting || w.energy <= 0) return 'resting';
   if (workerIsIdle(w)) return 'idle';
-  if (w.jobBlocked) return 'stuck · no job';
+  if (w.jobBlocked) return orderScratchShort(w) || 'stuck · no job';
   if (w.job) return `digging (${w.job.x},${w.job.y})`;
   return 'seeking';
 }
@@ -4412,9 +4453,14 @@ function renderOrdersPanel() {
     : null;
   const stance = digStanceById(w.digStance || 'work');
   const focus = filter.id === 'idle' ? 'idle' : `digs ${filter.label}`;
+  const scratch = w.jobBlocked && !w.resting ? orderScratchStatus(w) : null;
   els.ordersHint.textContent =
     `Selected digger · ${focus} · heads ${heading.label} · ${stance.label}` +
-    (w.jobBlocked && !w.resting ? ' · stuck (no reachable dig)' : '') +
+    (scratch
+      ? ` · ${scratch}`
+      : w.jobBlocked && !w.resting
+        ? ' · stuck (no reachable dig)'
+        : '') +
     (shack ? ` · rests at shack (${shack.x},${shack.y})` : ' · rests at nearest shack / spawn');
 
   els.orders.innerHTML = '';
@@ -4954,7 +5000,7 @@ function bindHelpTips() {
           text: `◆ from seals (+${TILES.seal?.shards ?? 1}), core (+${TILES.core?.shards ?? 4}), and depth grants — shell (hardness ${shellH}) drops fragments only.`,
         },
         {
-          text: `Seals: prestige ×1 only unlocks the attempt (hardness ${sealH}). Scratch needs a high Iron-bound pick — Steel tools only speed hits. Core needs prestige ×5 (hardness ${coreH}) plus an even higher scratch gate.`,
+          text: `Seals: prestige ×1 only unlocks the attempt (hardness ${sealH}). Scratch needs Iron-bound pick level 6 with no shards — Seal splitter or Inheritance can lower that. Steel tools only speed hits. Core needs prestige ×5 (hardness ${coreH}) plus an even higher scratch gate.`,
         },
         {
           text: `Unlock: ${needPct}% depth and a ${PRESTIGE_MIN_COLUMNS}-wide open shaft to that line (now ${depthPct}%, ${cols}/${PRESTIGE_MIN_COLUMNS} cols). Wider digs bank more ◆ (preview +${grant}). Holding ◆ does not unlock prestige.`,

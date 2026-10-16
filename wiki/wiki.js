@@ -484,7 +484,7 @@ function pageTile(id) {
         <li>Hardness is hit points at dig power 1; pick tier and shards raise scratch gates.</li>
         ${hazardNote ? `<li>${esc(hazardNote)}</li>` : ''}
         ${id === 'core' ? '<li>Core usually needs prestige ×5 and pick/seal investment.</li>' : ''}
-        ${id === 'seal' ? '<li>Seals drop ◆. Prestige ×1 unlocks the attempt and trims hit points on a new dig. Scratching one needs a high Iron-bound pick (about level 6 with no shards). Steel tools and Heavier pick only add damage. Seal splitter and Inheritance also raise the gate.</li>' : ''}
+        ${id === 'seal' ? '<li>Seals drop ◆. Prestige ×1 unlocks the attempt and trims hit points on a new dig. Scratching one needs Iron-bound pick level 6 with no shards — Seal splitter or Inheritance can lower that. Steel tools and Heavier pick only speed the hits.</li>' : ''}
         ${id === 'tree' ? `<li>Chop for wood; ${buildingLink('grove')} replants on the sky pad.</li>` : ''}
       </ul>
     </section>
@@ -745,7 +745,7 @@ function mechanicBody(id) {
   switch (id) {
     case 'digging':
       return `
-        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, shell, and seals need Iron-bound pick before they can be scratched — Steel tools only add damage after that. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
+        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, and shell need Iron-bound pick before they can be scratched. A seal needs Iron-bound pick level 6 (Seal splitter or Inheritance can lower that). Steel tools only speed the hits. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
           <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
@@ -770,6 +770,7 @@ function mechanicBody(id) {
     case 'crew':
       return `
         <p>Hire diggers (cap from shacks + shards). New hires start <strong>Idle</strong> until you set a dig target. Energy restores at rest; vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality. Diggers return to the face they left; tree cutters walk to the nearest tree instead.</p>
+        <p>A Seal or Core order will not swing at a face the pick cannot scratch. The status bar and the selected digger’s orders name the missing Iron-bound level (6 with no shards). Steel tools do not open it.</p>
         <h3>Filters</h3>
         <ul>${DIG_FILTERS.map((f) => `<li><strong>${esc(f.label)}</strong> — ${esc(f.blurb)}</li>`).join('')}</ul>
         <h3>Headings</h3>
@@ -807,7 +808,8 @@ function mechanicBody(id) {
         <h3>Smelter (~7s base)</h3>
         <ul>${SMELT_RECIPES.map((r) => `<li>${esc(formatRecipeLine(r))}</li>`).join('')}</ul>
         <h3>Refinery (~10s base)</h3>
-        <ul>${REFINE_RECIPES.map((r) => `<li>${esc(formatRecipeLine(r))}</li>`).join('')}</ul>`;
+        <ul>${REFINE_RECIPES.map((r) => `<li>${esc(formatRecipeLine(r))}</li>`).join('')}</ul>
+        <p>Iron bars buy ${link('#/upgrade/pick_tier', 'Iron-bound pick')} — level 6 scratches a seal, and Seal splitter or Inheritance can lower that. Steel bars buy ${link('#/upgrade/steel_tools', 'Steel tools')}, which speed hits and do not raise scratch.</p>`;
     case 'layers':
       return `
         <p>HUD chapter beside Depth:</p>

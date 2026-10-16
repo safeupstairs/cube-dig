@@ -429,7 +429,7 @@ export const UPGRADES = [
     id: 'pick_tier',
     name: 'Iron-bound pick',
     blurb:
-      'Unlocks gold / crystal / deeper rock. Dig iron with starter pick → smelt bars → buy this.',
+      'Unlocks gold, crystal, and deeper rock. Level 6 scratches a seal — Seal splitter or Inheritance can lower that. Dig iron, smelt bars, then buy this.',
     baseCost: 120,
     max: 6,
     needsBars: true,
@@ -437,7 +437,8 @@ export const UPGRADES = [
   {
     id: 'steel_tools',
     name: 'Steel tools',
-    blurb: '+0.9 dig strength per level. Needs steel bars from a Refinery (iron bar + coal).',
+    blurb:
+      '+0.9 dig strength per level. Fewer hits, not a higher scratch. Needs steel bars from a Refinery (iron bar + coal).',
     baseCost: 160,
     max: 5,
     needsSteel: true,
@@ -813,7 +814,8 @@ export const DIG_FILTERS = [
     label: 'Seal',
     short: 'L',
     match: ['seal'],
-    blurb: 'Crack seals for ◆. Needs a high Iron-bound pick — Steel tools only speed hits.',
+    blurb:
+      'Crack seals for ◆. Iron-bound pick level 6 scratches one (Seal splitter or Inheritance can lower that). Steel tools only speed hits.',
     requireSeen: 'seal',
   },
   {
@@ -1008,7 +1010,7 @@ export function achievementById(id) {
 /**
  * One-shot guidance tips. Sticky across prestige; cleared only on hard reset.
  * Early ladder: start_chop → dig_stone → hire_digger → crew_wood.
- * Situational: rain / ore / biomes / prestige.
+ * Situational: rain / ore / biomes / seal / prestige.
  */
 export const TUTORIAL_TIPS = [
   {
@@ -1067,6 +1069,11 @@ export const TUTORIAL_TIPS = [
     text: 'Lava — diggers burn if they stand beside it. Dig around the glow or clear a safe path.',
   },
   {
+    id: 'seal_tip',
+    title: 'Seal',
+    text: 'A seal needs Iron-bound pick level 6 to scratch. Seal splitter or Inheritance can lower that. Steel tools only speed the hits.',
+  },
+  {
     id: 'prestige_tip',
     title: 'Prestige',
     text: 'Prestige unlocks at 25% depth with a 3-wide shaft. Reset keeps ◆ shards forever (Prestige tab).',
@@ -1101,6 +1108,7 @@ export const WIKI_SECTIONS = [
       'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Hard reset clears everything including tips.',
+      'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
       'Drag diggers on the map to reposition them. After resting they return to their last dig stand. Pause (HUD or Space) freezes the simulation and digging — crew, monsters, plants, weather, and floods stay still. Building, hiring, and selling still work.',
     ],
   },
@@ -1123,7 +1131,7 @@ export const WIKI_SECTIONS = [
       'Surface only (sky pad above the dirt). Click a placed smelter to lock its recipe: Auto, Iron, Copper, Gold, or Off (saves coal). Specialize multiple smelters.',
       'Crafts are slow by default (~7s per bar). A progress bar appears above the building while it works. Hotter furnace speeds every smelter and refinery.',
       ...SMELT_RECIPES.map((r) => formatRecipeLine(r)),
-      'Iron bars unlock the Iron-bound pick upgrade.',
+      'Iron bars unlock the Iron-bound pick. Level 6 scratches a seal — Seal splitter or Inheritance can lower that.',
     ],
   },
   {
@@ -1133,7 +1141,7 @@ export const WIKI_SECTIONS = [
       'Surface advanced plant. Costs iron bars to build. Click to lock recipe: Auto, Steel, Copper wire, Crystal lens, or Off (saves coal).',
       'Even slower than smelting (~10s). Same Hotter furnace upgrade. Progress bar shows while refining.',
       ...REFINE_RECIPES.map((r) => formatRecipeLine(r)),
-      'Steel → Steel tools. Copper wire → Pump coils / Drill coils. Crystal lenses → Focus optics / Bright wards (and sell well).',
+      'Steel → Steel tools, which speed hits and do not raise scratch. Copper wire → Pump coils / Drill coils. Crystal lenses → Focus optics / Bright wards (and sell well).',
     ],
   },
   {
@@ -1141,6 +1149,7 @@ export const WIKI_SECTIONS = [
     title: 'Crew & orders',
     paragraphs: [
       'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Home shack and combat stance too.',
+      'A Seal or Core order refuses a face the pick cannot scratch. The status bar and that digger’s orders say why — usually Iron-bound pick level 6. Steel tools do not open the seal.',
       'Tree cutters, after a rest, walk to the nearest tree. Other diggers return to the face they left.',
       'Stance: Work (default), Flee (run to rest when a horror closes in), Stand ground (militia diggers chip horror HP when hit).',
       'Rest restores energy at shacks/cottage; chapels heal vitality. Pumps keep flood pockets dry. Ward posts burn deep horrors — Bright wards boost radius and DPS.',
