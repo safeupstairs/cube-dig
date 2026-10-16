@@ -813,7 +813,7 @@ export const DIG_FILTERS = [
     label: 'Seal',
     short: 'L',
     match: ['seal'],
-    blurb: 'Crack seals for ◆ (pick tier / prestige).',
+    blurb: 'Crack seals for ◆. Needs a high Iron-bound pick — Steel tools only speed hits.',
     requireSeen: 'seal',
   },
   {

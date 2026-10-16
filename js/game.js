@@ -456,41 +456,93 @@ function canDigHardness(tileId) {
   return canScratchTile(state, tileId);
 }
 
-/** Prestige / pick gate for cube layers — null if clear. */
+/** Prestige lock for cube layers — null if clear. Scratch is a separate pick gate. */
 function cubeLayerGateReason(tileId) {
   if (tileId === 'core' && state.prestige < 5) {
-    return 'Need prestige ×5 to crack the core';
+    return 'Locked until prestige ×5';
   }
   if (tileId === 'seal' && state.prestige < 1 && (state.upgrades.pick_tier || 0) < 2) {
-    return 'Need prestige ×1 or pick tier 2 to crack the seal';
+    return 'Locked until prestige ×1 (or Iron-bound pick level 2)';
   }
   return null;
 }
 
+function fmtScratch(n) {
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+/** Scratch threshold vs current pick reach. Steel tools are not part of this. */
+function scratchPlan(tileId) {
+  const need =
+    tileId === 'seal' || tileId === 'core'
+      ? digHardnessNeed(tileId) * 0.35
+      : (TILES[tileId]?.hardness || 0) * 0.35;
+  const have = maxHardness(state);
+  const pick = state.upgrades.pick_tier || 0;
+  const max = UPGRADES.find((u) => u.id === 'pick_tier')?.max ?? 6;
+  const extra = have + 1e-6 >= need ? 0 : Math.ceil((need - have) / 5.5 - 1e-9);
+  return {
+    need,
+    have,
+    pick,
+    max,
+    target: pick + extra,
+    opensWithPick: pick + extra <= max,
+  };
+}
+
+/** Why this face cannot be scratched — null if the pick already reaches it. */
+function scratchBlockLines(tileId) {
+  const plan = scratchPlan(tileId);
+  if (plan.have + 1e-6 >= plan.need) return null;
+  const lines = [
+    {
+      text: `Too hard to scratch (${fmtScratch(plan.have)} / ${fmtScratch(plan.need)})`,
+      warn: true,
+    },
+  ];
+  if (plan.opensWithPick) {
+    lines.push({
+      text: `Iron-bound pick ${plan.target}/${plan.max} opens it (you have ${plan.pick})`,
+      warn: true,
+    });
+  } else {
+    lines.push({
+      text: `Iron-bound pick ${plan.pick}/${plan.max} is still short`,
+      warn: true,
+    });
+    lines.push({
+      text: 'Seal splitter or Inheritance also raise scratch',
+      warn: true,
+    });
+  }
+  if (tileId === 'seal' || tileId === 'core') {
+    lines.push({
+      text: 'Steel tools and Heavier pick only speed hits',
+      muted: true,
+    });
+  }
+  return lines;
+}
+
+function scratchBlockStatus(tileId) {
+  const lines = scratchBlockLines(tileId);
+  if (!lines) return null;
+  return lines.map((l) => l.text).join('. ');
+}
+
 /** Cube-layer facts for the hover toolbox (not the inspect plaque). */
 function cubeTipLines(tileId) {
-  const h = TILES[tileId]?.hardness;
   const shards = TILES[tileId]?.shards;
   if (tileId === 'shell') {
-    return [
-      `Hardness ${h}`,
-      'Fragments only — no ◆ from shell',
-      'Hand-dig · drills skip cube layers',
-    ];
+    return ['Fragments only — no ◆ from shell', 'Hand-dig · drills skip cube layers'];
   }
   if (tileId === 'seal') {
-    return [
-      'Needs prestige ×1 or pick tier 2',
-      `Hardness ${h}`,
-      `+${shards ?? 1}◆ · hand-dig · drills skip`,
-    ];
+    return [`+${shards ?? 1}◆ when it breaks`, 'Hand-dig only — drills skip seals'];
   }
   if (tileId === 'core') {
-    return [
-      'Needs prestige ×5',
-      `Hardness ${h}`,
-      `+${shards ?? 4}◆ · hand-dig · drills skip`,
-    ];
+    return [`+${shards ?? 4}◆ when it breaks`, 'Hand-dig only — drills skip the core'];
   }
   return null;
 }
@@ -499,7 +551,11 @@ function cubeTipLines(tileId) {
 function digInspectStatusShort(tileId, x, y) {
   if (!isExposed(state.world, x, y)) return 'Not exposed';
   if (cubeLayerGateReason(tileId)) return 'Locked';
-  if (!canDigHardness(tileId)) return 'Too hard';
+  if (!canDigHardness(tileId)) {
+    const plan = scratchPlan(tileId);
+    if (plan.opensWithPick) return `Need Iron-bound ${plan.target}`;
+    return 'Need Seal splitter';
+  }
   return 'Ready';
 }
 
@@ -516,9 +572,9 @@ function digTipStatusLines(tileId, x, y) {
     return lines;
   }
   if (!canDigHardness(tileId)) {
-    const h = TILES[tileId]?.hardness || 0;
-    if (tileId === 'shell' || tileId === 'seal' || tileId === 'core') {
-      lines.push({ text: `Pick too weak — hardness ${h}`, warn: true });
+    const blocked = scratchBlockLines(tileId);
+    if (blocked) {
+      for (const row of blocked) lines.push(row);
     } else {
       lines.push({ text: 'Too hard — need a stronger pick', warn: true });
     }
@@ -1441,21 +1497,17 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
     const need = digHardnessNeed(t.id);
     if (maxHardness(state) < need * 0.35) {
       if (fromPlayer) {
-        setStatus(`Pick too weak — hardness ${TILES[t.id].hardness}`);
+        setStatus(scratchBlockStatus(t.id) || 'Pick too weak');
         sfx.deny();
       }
       return false;
     }
   } else if (!canScratchTile(state, t.id)) {
     if (fromPlayer) {
-      const h = TILES[t.id]?.hardness || 0;
-      if (t.id === 'shell') {
-        setStatus(`Pick too weak — hardness ${h}`);
-      } else {
-        setStatus(
+      setStatus(
+        scratchBlockStatus(t.id) ||
           `Too hard (${TILES[t.id].name}). Dig iron ore with your starter pick → smelt bars → buy Iron-bound pick.`
-        );
-      }
+      );
       sfx.deny();
     }
     return false;
@@ -4901,7 +4953,9 @@ function bindHelpTips() {
         {
           text: `◆ from seals (+${TILES.seal?.shards ?? 1}), core (+${TILES.core?.shards ?? 4}), and depth grants — shell (hardness ${shellH}) drops fragments only.`,
         },
-        { text: `Seals need prestige ×1 or pick tier 2 (hardness ${sealH}). Core needs prestige ×5 (hardness ${coreH}).` },
+        {
+          text: `Seals: prestige ×1 only unlocks the attempt (hardness ${sealH}). Scratch needs a high Iron-bound pick — Steel tools only speed hits. Core needs prestige ×5 (hardness ${coreH}) plus an even higher scratch gate.`,
+        },
         {
           text: `Unlock: ${needPct}% depth and a ${PRESTIGE_MIN_COLUMNS}-wide open shaft to that line (now ${depthPct}%, ${cols}/${PRESTIGE_MIN_COLUMNS} cols). Wider digs bank more ◆ (preview +${grant}). Holding ◆ does not unlock prestige.`,
           muted: true,

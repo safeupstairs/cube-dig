@@ -484,7 +484,7 @@ function pageTile(id) {
         <li>Hardness is hit points at dig power 1; pick tier and shards raise scratch gates.</li>
         ${hazardNote ? `<li>${esc(hazardNote)}</li>` : ''}
         ${id === 'core' ? '<li>Core usually needs prestige ×5 and pick/seal investment.</li>' : ''}
-        ${id === 'seal' ? '<li>Seals drop ◆ and soften after prestige / Seal splitter.</li>' : ''}
+        ${id === 'seal' ? '<li>Seals drop ◆. Prestige ×1 unlocks the attempt and trims hit points on a new dig. Scratching one needs a high Iron-bound pick (about level 6 with no shards). Steel tools and Heavier pick only add damage. Seal splitter and Inheritance also raise the gate.</li>' : ''}
         ${id === 'tree' ? `<li>Chop for wood; ${buildingLink('grove')} replants on the sky pad.</li>` : ''}
       </ul>
     </section>
@@ -745,7 +745,7 @@ function mechanicBody(id) {
   switch (id) {
     case 'digging':
       return `
-        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Harder tiles need Iron-bound pick / prestige softens.</p>
+        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, shell, and seals need Iron-bound pick before they can be scratched — Steel tools only add damage after that. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
           <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
