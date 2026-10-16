@@ -190,12 +190,13 @@ const WIKI_SPRITE_T = 0.52;
 
 function drawBuildingIcon(canvas, id) {
   const ctx = canvas.getContext('2d');
-  const n = 16;
+  const span = BUILDINGS[id]?.spanW || 1;
+  const n = 32;
   canvas.width = n;
   canvas.height = n;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, n, n);
-  drawBuildingSprite(ctx, 0, 0, n, {
+  drawBuildingSprite(ctx, 0, 0, n / span, {
     id,
     def: BUILDINGS[id],
     // Representative working / lit frames for machines
@@ -850,7 +851,7 @@ function mechanicBody(id) {
         <ul>
           <li>${link('#/shard/perm_sense', 'Echo Sense')} shard upgrades sharpen the pulse.</li>
           <li>${link('#/upgrade/focus_optics', 'Focus optics')} needs ${itemLink('crystalLens')}.</li>
-          <li>Toward core heading unlocks with sense (or after shell fog reveals).</li>
+          <li>Toward core heading stays locked until the core tile is uncovered.</li>
         </ul>`;
     default:
       return null;

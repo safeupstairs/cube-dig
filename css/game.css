@@ -184,9 +184,9 @@ body {
 }
 
 .hud-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -1421,28 +1421,70 @@ a.btn:hover {
 .menu-rail {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.55rem;
   align-items: stretch;
   justify-content: center;
-  padding: 0.5rem 0.7rem;
-  border-top: 3px solid #0a0c0e;
+  padding: 0.55rem 0.85rem 0.7rem;
+  border-top: 4px solid #0a0c0e;
   background:
-    linear-gradient(180deg, rgba(232, 212, 138, 0.1) 0%, transparent 40%),
-    linear-gradient(180deg, #3a3228 0%, #241e18 55%, #1a1612 100%);
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.08) 0 2px,
+      transparent 2px 6px
+    ),
+    linear-gradient(180deg, #5a4030 0%, #3a2a1c 18%, #241c14 100%);
   position: relative;
   z-index: 5;
   box-shadow:
-    inset 0 1px 0 var(--brass-lo),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    inset 0 2px 0 #8a6a48,
+    inset 0 3px 0 #2a1c12,
+    inset 0 -3px 0 #120e0a;
 }
 
 .menu-rail .hot-slot {
-  min-width: 4.6rem;
-  max-width: 5.8rem;
-  min-height: 3.2rem;
+  min-width: 5.4rem;
+  max-width: 6.6rem;
+  min-height: 4.6rem;
   position: relative;
   align-items: center;
   text-align: center;
+  justify-content: flex-start;
+  gap: 0.1rem;
+  padding: 0.35rem 0.4rem 0.3rem;
+  background:
+    linear-gradient(180deg, #3a342c 0%, #221c16 100%);
+  box-shadow:
+    0 3px 0 #120e0a,
+    inset 0 1px 0 #6a5a48,
+    inset 0 -2px 0 #0a0806;
+}
+
+.menu-rail .slot-ico {
+  width: 28px;
+  height: 28px;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.menu-rail .slot-ico svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+  shape-rendering: crispEdges;
+}
+
+.menu-rail .hot-slot.is-active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 #120e0a,
+    inset 0 1px 0 #e8d48a,
+    inset 0 -1px 0 #1a2a14;
+}
+
+.menu-rail .hot-slot .slot-key {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.28rem;
 }
 
 /* Actionable panel ping — top-right corner of the rail button */
@@ -1829,13 +1871,6 @@ a.btn:hover {
 .shack-btn.is-active {
   border-color: var(--brass);
   background: linear-gradient(180deg, #3a4a2a 0%, #2a3220 100%);
-}
-
-.filter-btn.is-off.is-active {
-  border-color: var(--danger);
-  background: linear-gradient(180deg, #3a2828 0%, #221818 100%);
-  color: #e8b0a8;
-}
   color: #e8d48a;
   box-shadow:
     0 0 0 1px var(--brass-hi),
@@ -1843,10 +1878,24 @@ a.btn:hover {
     inset 1px 1px 0 #6a8a5a;
 }
 
+.filter-btn.is-off.is-active {
+  border-color: var(--danger);
+  background: linear-gradient(180deg, #3a2828 0%, #221818 100%);
+  color: #e8b0a8;
+}
+
 .filter-btn.is-locked:disabled {
-  opacity: 0.45;
+  opacity: 1;
   cursor: not-allowed;
-  color: var(--muted);
+  color: #6e675e;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      #161410 0 3px,
+      #1e1a16 3px 6px
+    );
+  border-color: #2a2622;
+  box-shadow: inset 0 0 0 1px #0c0a08;
 }
 
 .orders-clear {
