@@ -134,12 +134,12 @@ export const RESOURCE_META = {
   gold: { name: 'Gold ore', sell: 8 },
   crystal: { name: 'Crystal', sell: 12 },
   fragment: { name: 'Fragment', sell: 8 },
-  copperBar: { name: 'Copper bar', sell: 9 },
-  ironBar: { name: 'Iron bar', sell: 12 },
-  goldBar: { name: 'Gold bar', sell: 24 },
-  steelBar: { name: 'Steel bar', sell: 22 },
+  copperBar: { name: 'Copper bar', sell: 14 },
+  ironBar: { name: 'Iron bar', sell: 16 },
+  goldBar: { name: 'Gold bar', sell: 28 },
+  steelBar: { name: 'Steel bar', sell: 28 },
   crystalLens: { name: 'Crystal lens', sell: 36 },
-  copperWire: { name: 'Copper wire', sell: 5 },
+  copperWire: { name: 'Copper wire', sell: 8 },
 };
 
 /** HUD / market ordering — keep bags readable as the catalog grows. */
@@ -381,7 +381,7 @@ export const BUILDINGS = {
     id: 'chapel',
     name: 'Chapel',
     role: 'Medicine',
-    cost: { coins: 70, wood: 8, stone: 8, fragment: 1 },
+    cost: { coins: 90, wood: 8, stone: 12 },
     blurb:
       'Crew resting in range slowly recover vitality (the wear that kills diggers). Place near deep shacks. Does not hire seats. Each extra chapel costs more.',
     color: '#7a6a58',
@@ -408,7 +408,7 @@ export const BUILDINGS = {
     id: 'listening',
     name: 'Listening post',
     role: 'Survey',
-    cost: { coins: 55, wood: 8, stone: 10 },
+    cost: { coins: 75, wood: 6, stone: 14 },
     max: 1,
     blurb:
       'Tunes Echo Sense to the buried cube — a wide vague pulse and rough camp bearing (no fog clear). Echo Sense shards and Focus optics tighten the search. Place in the shaft. Max 1.',
@@ -1110,7 +1110,7 @@ export const WIKI_SECTIONS = [
     paragraphs: [
       'Bags hold everything you dig or craft. Once a resource has been in the bag this dig, its chip stays at 0 instead of disappearing. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
       'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick).',
-      'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on the Chapel and Ward posts. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
+      'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Ward posts. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
       'Menus: Build (Surface / Shaft / Survive), Market (by resource group), Crew, Shop (coin upgrades), Echo (prestige + ◆).',
