@@ -151,10 +151,25 @@ body {
   align-items: center;
   gap: 0.3rem;
   flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--mono);
 }
 
-.bag-chips li.bag-sep {
+.bag-chips li.bag-lead {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bag-chips .bag-sep {
+  flex: 0 0 auto;
   border: none;
   background: transparent;
   box-shadow: none;
@@ -165,9 +180,10 @@ body {
   text-transform: uppercase;
   color: var(--muted);
   opacity: 0.85;
+  white-space: nowrap;
 }
 
-.bag-chips li {
+.bag-chips .bag-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 0.3rem;
@@ -183,18 +199,18 @@ body {
   font-size: 0.95rem;
 }
 
-.bag-chips li.is-empty {
+.bag-chips .bag-chip.is-empty {
   opacity: 0.45;
   background: var(--slot);
   box-shadow: inset 1px 1px 0 var(--slot-hi);
 }
 
-.bag-chips li span:first-child {
+.bag-chips .bag-chip span:first-child {
   color: var(--brass-hi);
   font-size: 0.85rem;
 }
 
-.bag-chips li strong {
+.bag-chips .bag-chip strong {
   color: var(--text);
   font-weight: normal;
 }
@@ -220,7 +236,9 @@ body {
 
 .hud-top {
   display: grid;
-  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr) minmax(12rem, auto);
+  /* Plaque column cannot shrink away — brand yields first, meters stay max-content. */
+  grid-template-columns: minmax(0, 14rem) minmax(12rem, 1fr) max-content;
+  grid-template-areas: "brand inspect meters";
   gap: 0.65rem 1rem;
   align-items: center;
   padding: 0.55rem 0.75rem;
@@ -235,6 +253,7 @@ body {
 }
 
 .brand {
+  grid-area: brand;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -243,6 +262,10 @@ body {
 
 .brand h1 {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--pixel);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
@@ -278,16 +301,18 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Fixed plaque — width from grid, not content; grows with wider HUD */
+/* Fixed plaque — at least ~12rem so a short status stays readable */
 .inspect-slot {
-  min-width: 0;
+  grid-area: inspect;
+  min-width: 12rem;
   width: 100%;
   max-width: min(48rem, 100%);
-  justify-self: center;
+  justify-self: stretch;
 }
 
 .inspect {
   width: 100%;
+  min-width: 12rem;
   box-sizing: border-box;
   min-height: 2.1rem;
   padding: 0.35rem 0.55rem;
@@ -344,12 +369,143 @@ body {
 }
 
 .meters {
+  grid-area: meters;
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
+  max-width: 100%;
+}
+
+.meter {
+  flex: 0 0 auto;
+}
+
+.pause-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.2rem 0.5rem 0.2rem 0.32rem;
+  border: 2px solid #0a0c0e;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--brass-hi);
+  text-shadow: 1px 1px 0 #000;
+  background: linear-gradient(180deg, #3a3228 0%, #241e18 100%);
+  box-shadow:
+    0 0 0 1px rgba(196, 163, 90, 0.28),
+    inset -1px -1px 0 #0a0c0e,
+    inset 1px 1px 0 #6a5a40;
+}
+
+.pause-btn:hover {
+  color: #fff8e0;
+  background: linear-gradient(180deg, #4a4034 0%, #2e261e 100%);
+}
+
+.pause-btn:focus-visible {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 2px;
+}
+
+.pause-btn:active {
+  transform: translateY(1px);
+}
+
+.pause-btn.is-paused {
+  color: #1a1208;
+  text-shadow: none;
+  background: linear-gradient(180deg, #f4e4b0 0%, #c4a35a 55%, #8a7040 100%);
+  box-shadow:
+    0 0 0 1px #e8d48a,
+    inset -1px -1px 0 #6a5428,
+    inset 1px 1px 0 #fff4c8;
+}
+
+.pause-glyph {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  box-sizing: border-box;
+  border: 2px solid #0a0c0e;
+  background: #141210;
+  box-shadow:
+    inset 1px 1px 0 #3a3228,
+    inset -1px -1px 0 #000;
+}
+
+.pause-glyph::before,
+.pause-glyph::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  width: 3px;
+  height: 10px;
+  background: #f4e4b0;
+}
+
+.pause-glyph::before {
+  left: 4px;
+}
+
+.pause-glyph::after {
+  right: 4px;
+}
+
+.pause-btn.is-paused .pause-glyph {
+  background: #f4e4b0;
+  box-shadow:
+    inset 1px 1px 0 #fff8e0,
+    inset -1px -1px 0 #8a7040;
+}
+
+.pause-btn.is-paused .pause-glyph::before {
+  left: 6px;
+  top: 4px;
+  width: 0;
+  height: 0;
+  background: none;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent #1a1208;
+}
+
+.pause-btn.is-paused .pause-glyph::after {
+  content: none;
+}
+
+.canvas-wrap.is-paused::after {
+  content: 'Paused';
+  position: absolute;
+  top: 0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+  font-family: var(--pixel);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a1208;
+  background: #e8d48a;
+  padding: 0.4rem 0.65rem;
+  border: 2px solid #0a0c0e;
+  box-shadow: 2px 2px 0 #000;
+}
+
+body.is-paused .inspect.is-marquee .inspect-text {
+  animation-play-state: paused;
 }
 
 .meter {
@@ -1953,6 +2109,40 @@ a.btn:hover {
   cursor: pointer;
 }
 
+/*
+ * Brand (14rem) + a 12rem plaque + one-line meters (~676px) need ~1240px of
+ * viewport. Below that the title and tagline hide so the plaque keeps its width.
+ */
+@media (max-width: 1280px) {
+  .brand {
+    display: none;
+  }
+
+  .hud-top {
+    grid-template-columns: minmax(12rem, 1fr) max-content;
+    grid-template-areas: "inspect meters";
+  }
+}
+
+/* Beside a full meters row the plaque would drop under 12rem — stack instead. */
+@media (max-width: 980px) {
+  .hud-top {
+    grid-template-columns: minmax(12rem, 1fr);
+    grid-template-areas:
+      "meters"
+      "inspect";
+  }
+
+  .meters {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .inspect-slot {
+    max-width: none;
+  }
+}
+
 @media (max-width: 900px) {
   /*
    * Lock the shell — Chromium (Chrome/Brave, incl. iOS) cancels canvas pinch and
@@ -1981,23 +2171,24 @@ a.btn:hover {
     overscroll-behavior: none;
   }
 
-  .hud-top {
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
+  .brand {
+    display: none;
   }
 
-  .brand {
-    grid-column: 1;
+  .hud-top {
+    grid-template-columns: minmax(12rem, 1fr);
+    grid-template-areas:
+      "meters"
+      "inspect";
+    gap: 0.4rem 0.5rem;
   }
 
   .meters {
-    grid-column: 2;
-    grid-row: 1;
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .inspect-slot {
-    grid-column: 1 / -1;
-    grid-row: 2;
     max-width: none;
   }
 
@@ -2111,7 +2302,27 @@ a.btn:hover {
     min-width: 0;
     max-width: none;
     min-height: 3rem;
-    padding-left: 1.35rem;
+    padding: 0.28rem 0.2rem 0.28rem 0.28rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  .menu-rail .hot-slot::before {
+    display: none;
+  }
+
+  .menu-rail .hot-slot .slot-name,
+  .menu-rail .hot-slot .slot-role {
+    align-self: stretch;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .menu-rail .hot-slot .slot-name {
+    font-size: 1rem;
   }
 
   .bag-bar {

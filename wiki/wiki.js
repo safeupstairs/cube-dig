@@ -745,7 +745,7 @@ function mechanicBody(id) {
   switch (id) {
     case 'digging':
       return `
-        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Harder tiles need Iron-bound pick / prestige softens.</p>
+        <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Harder tiles need Iron-bound pick / prestige softens.</p>
         <ul>
           <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
@@ -769,7 +769,7 @@ function mechanicBody(id) {
         </ul>`;
     case 'crew':
       return `
-        <p>Hire diggers (cap from shacks + shards). Energy restores at rest; vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality.</p>
+        <p>Hire diggers (cap from shacks + shards). New hires start <strong>Idle</strong> until you set a dig target. Energy restores at rest; vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality. Diggers return to the face they left; tree cutters walk to the nearest tree instead.</p>
         <h3>Filters</h3>
         <ul>${DIG_FILTERS.map((f) => `<li><strong>${esc(f.label)}</strong> — ${esc(f.blurb)}</li>`).join('')}</ul>
         <h3>Headings</h3>

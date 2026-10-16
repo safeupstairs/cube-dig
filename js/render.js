@@ -15,6 +15,9 @@ export function createRenderer(canvas) {
     zoom: 2.4,
   };
 
+  /** Simulation clock in ms. Frozen while the game is paused. */
+  let animNow = 0;
+
   function resize() {
     const parent = canvas.parentElement;
     const rect = parent?.getBoundingClientRect?.();
@@ -114,7 +117,7 @@ export function createRenderer(canvas) {
       ctx.fillStyle = 'rgba(180, 220, 240, 0.4)';
       ctx.fillRect(px + cw * 0.4, py + ch * 0.55, Math.max(2, cw * 0.15), Math.max(2, ch * 0.1));
     } else if (id === 'lava') {
-      const pulse = 0.45 + 0.55 * Math.sin(performance.now() / 280 + x * 0.7 + y);
+      const pulse = 0.45 + 0.55 * Math.sin(animNow / 280 + x * 0.7 + y);
       ctx.fillStyle = pulse > 0.55 ? 'rgba(255, 200, 80, 0.45)' : 'rgba(220, 80, 30, 0.35)';
       ctx.fillRect(px + cw * 0.25, py + ch * 0.35, cw * 0.5, Math.max(2, ch * 0.2));
       if (pulse > 0.7) {
@@ -159,7 +162,7 @@ export function createRenderer(canvas) {
     const working = !tired && atFace;
     // Looping dig cycle: swing → impact flash → recover
     const phase = working
-      ? (performance.now() / 220 + (wkr.uid?.length || 0) * 1.7) % (Math.PI * 2)
+      ? (animNow / 220 + (wkr.uid?.length || 0) * 1.7) % (Math.PI * 2)
       : 0;
     const swing = working ? Math.sin(phase) : 0;
     const bobY = working ? Math.abs(Math.sin(phase * 2)) * 1.2 : 0;
@@ -239,7 +242,7 @@ export function createRenderer(canvas) {
 
   function drawMonster(px, py, tw, m) {
     const s = tw / 16;
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 280 + (m.x || 0));
+    const pulse = 0.5 + 0.5 * Math.sin(animNow / 280 + (m.x || 0));
     pxRect(px, py, 3 * s, 5 * s, 10 * s, 8 * s, '#2a1820');
     pxRect(px, py, 4 * s, 4 * s, 8 * s, 3 * s, '#3a2030');
     pxRect(px, py, 5 * s, 6 * s, 2 * s, 2 * s, pulse > 0.5 ? '#c45c4a' : '#8a3028');
@@ -383,6 +386,10 @@ export function createRenderer(canvas) {
    * @param {{uid:string,x:number,y:number,ok:boolean,moved?:boolean}|null} [opts.workerDrop]
    */
   function draw(state, hover, fx, opts = null) {
+    animNow =
+      typeof opts === 'object' && opts && typeof opts.animNow === 'number'
+        ? opts.animNow
+        : animNow;
     const selectedWorkerId =
       typeof opts === 'string' || opts == null
         ? opts
@@ -539,7 +546,7 @@ export function createRenderer(canvas) {
         }
 
         if (id === 'seal' || id === 'core') {
-          ctx.globalAlpha = 0.2 + 0.15 * Math.sin(performance.now() / 350 + x * 0.4 + y);
+          ctx.globalAlpha = 0.2 + 0.15 * Math.sin(animNow / 350 + x * 0.4 + y);
           ctx.fillStyle = '#fff';
           ctx.fillRect(px + 2, py + 2, tw - 4, 2);
           ctx.globalAlpha = 1;
@@ -584,7 +591,7 @@ export function createRenderer(canvas) {
     // Echo Sense pulse — soft ellipse around the cube (no fog reveal)
     const sense = opts && typeof opts === 'object' ? opts.echoSense : null;
     if (sense && sense.rx > 0 && sense.ry > 0) {
-      const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 700);
+      const pulse = 0.55 + 0.45 * Math.sin(animNow / 700);
       const c = worldToScreen(sense.cx + 0.5, sense.cy + 0.5, shake);
       ctx.save();
       ctx.translate(c.x, c.y);
@@ -701,7 +708,7 @@ export function createRenderer(canvas) {
     // Rain streaks + splash — one world-space pass (sky → surface → shafts)
     if (phase === 'rain' || phase === 'warn') {
       const raining = phase === 'rain';
-      const now = performance.now();
+      const now = animNow;
       const drift = raining ? 2.4 : 0.7;
       const sy = world.surfaceY;
       const cols = Math.max(1, x1 - x0 + 1);

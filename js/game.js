@@ -122,6 +122,7 @@ const els = {
   prestigeBtn: document.getElementById('prestige-btn'),
   prestigeBlurb: document.getElementById('prestige-blurb'),
   status: document.getElementById('status'),
+  pauseBtn: document.getElementById('pause-btn'),
   resetBtn: document.getElementById('reset-btn'),
   introBtn: document.getElementById('intro-btn'),
   hotbar: document.getElementById('hotbar'),
@@ -183,6 +184,9 @@ let selectedWorkerId = null;
 let selectedBuildingUid = null;
 /** @type {{uid:string,until:number}|null} */
 let drillRadiusFlash = null;
+/** Simulation milliseconds — drives flashes and sprite motion. Frozen while paused. */
+let simMs = 0;
+let paused = false;
 let nextEntityId = 1;
 let hover = null;
 /** Last pointer client coords — used to recompute hover after pan/zoom. */
@@ -398,7 +402,7 @@ function setStatusHtml(html) {
   els.status.innerHTML = html;
 }
 
-/** Set inspect plaque text; enable marquee only when content overflows. */
+/** Set inspect plaque text; enable marquee only when content overflows a real plaque. */
 function setInspectText(msg) {
   const outer = els.inspect;
   const inner = els.inspectText || outer;
@@ -410,20 +414,30 @@ function setInspectText(msg) {
     outer.classList.remove('is-marquee');
     void outer.offsetWidth;
   }
-  requestAnimationFrame(() => {
-    const cs = getComputedStyle(outer);
-    const pad =
-      (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-    const avail = Math.max(0, outer.clientWidth - pad);
-    const fits = inner.scrollWidth <= avail + 1;
-    if (fits) {
-      outer.classList.remove('is-marquee');
-      outer.style.removeProperty('--inspect-slide');
-    } else {
-      outer.style.setProperty('--inspect-slide', `${avail}px`);
-      outer.classList.add('is-marquee');
-    }
-  });
+  requestAnimationFrame(syncInspectMarquee);
+}
+
+/** Scroll the hover line only when it overflows a plaque at least ~12rem wide. */
+function syncInspectMarquee() {
+  const outer = els.inspect;
+  const inner = els.inspectText || outer;
+  if (!outer || !inner) return;
+  const cs = getComputedStyle(outer);
+  const pad =
+    (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const avail = Math.max(0, outer.clientWidth - pad);
+  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const minPlaque = rootPx * 12;
+  // offsetWidth includes the border; min-width is the border box, not the content box.
+  const collapsed = outer.offsetWidth + 1 < minPlaque;
+  const fits = collapsed || inner.scrollWidth <= avail + 1;
+  if (fits) {
+    outer.classList.remove('is-marquee');
+    outer.style.removeProperty('--inspect-slide');
+  } else {
+    outer.style.setProperty('--inspect-slide', `${avail}px`);
+    outer.classList.add('is-marquee');
+  }
 }
 
 /** Hardness used by seal/core dig gate (seal splitter softens a bit). */
@@ -768,6 +782,7 @@ function createRunState(
     achievements: achievements && typeof achievements === 'object' ? { ...achievements } : {},
     // One-shot tips — kept across prestige, wiped on hard reset only
     tutorials: tutorials && typeof tutorials === 'object' ? { ...tutorials } : {},
+    bagSeen: {},
   };
   placeStarterVillage(run);
   return run;
@@ -1211,6 +1226,7 @@ function serialize() {
       : undefined,
     achievements: { ...(state.achievements || {}) },
     tutorials: { ...(state.tutorials || {}) },
+    bagSeen: { ...(state.bagSeen || {}) },
   };
 }
 
@@ -1315,6 +1331,7 @@ function hydrate(data) {
       data.achievements && typeof data.achievements === 'object' ? { ...data.achievements } : {},
     tutorials:
       data.tutorials && typeof data.tutorials === 'object' ? { ...data.tutorials } : {},
+    bagSeen: data.bagSeen && typeof data.bagSeen === 'object' ? { ...data.bagSeen } : {},
   };
   if (Array.isArray(data.floodCols) && data.floodCols.length === state.world.w) {
     state.floodCols = Float32Array.from(data.floodCols);
@@ -1505,21 +1522,35 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
     unlockAchievement('biome_gas');
   }
 
+  // Blast charges: on break, chance to chip one solid neighbor (player, crew, and drills).
+  // Only real faces count — a random cardinal was usually the open shaft, so the roll did nothing.
+  let blastNote = '';
   const blast = state.upgrades.blast || 0;
-  if (blast > 0 && Math.random() < 0.12 * blast) {
-    const nbs = [
+  if (blast > 0 && Math.random() < Math.min(0.72, 0.18 * blast)) {
+    const candidates = [];
+    for (const [nx, ny] of [
       [tx + 1, ty],
       [tx - 1, ty],
       [tx, ty + 1],
       [tx, ty - 1],
-    ];
-    const [nx, ny] = nbs[Math.floor(Math.random() * nbs.length)];
-    const nt = tileAt(state.world, nx, ny);
-    if (nt && TILES[nt.id]?.diggable && nt.id !== 'core' && isExposed(state.world, nx, ny)) {
+    ]) {
+      const nt = tileAt(state.world, nx, ny);
+      if (!nt || !TILES[nt.id]?.diggable || nt.id === 'core') continue;
+      if (!isExposed(state.world, nx, ny)) continue;
+      candidates.push(nt);
+    }
+    if (candidates.length) {
+      const nt = candidates[Math.floor(Math.random() * candidates.length)];
+      const nx = nt.x;
+      const ny = nt.y;
       state.world.hp[nt.i] -= digPower(state) * 0.8;
+      fx.burst(nx, ny, TILES[nt.id].color, 8);
+      fx.floatText(nx, ny - 0.25, 'crack', '#e8c878');
+      blastNote = ' · crack';
       if (state.world.hp[nt.i] <= 0) {
         const wid = nt.id;
-        setEmpty(state.world, nx, ny);
+        if (wid === 'tree') clearTreeToSoil(state.world, nx, ny);
+        else setEmpty(state.world, nx, ny);
         applyTileDrops(state, wid);
         fx.burst(nx, ny, TILES[wid].color, 8);
         if (wid === 'aquifer') onAquiferBreach(nx, ny);
@@ -1536,7 +1567,7 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
       (hazardNote ||
         `Broke ${TILES[was].name}` +
           (gained.coins ? ` · +${gained.coins}c` : '') +
-          (gained.shards ? ` · +${gained.shards}◆` : ''))
+          (gained.shards ? ` · +${gained.shards}◆` : '')) + blastNote
     );
   } else if (hazardNote) {
     setStatus(hazardNote);
@@ -1683,7 +1714,7 @@ function placeWorker(tx, ty) {
     energy: workerMaxEnergy(state),
     vitality: workerMaxVitality(state),
     resting: false,
-    digFilter: 'auto',
+    digFilter: 'idle',
     digHeading: 'down',
     digStance: 'work',
     shackUid: null,
@@ -1703,14 +1734,14 @@ function placeWorker(tx, ty) {
     tool = null;
     setStatus(
       atCap
-        ? `Digger hired — crew at cap. Dig / chop selected.`
-        : `Digger hired — can't afford another (${nextCost}c). Dig / chop selected.`
+        ? `Digger hired — idle until you set a dig target. Crew at cap. Dig / chop selected.`
+        : `Digger hired — idle until you set a dig target. Can't afford another (${nextCost}c). Dig / chop selected.`
     );
   } else {
     setStatus(
       cheats.freeBuild
-        ? `Digger hired (free build). Digging wears life — chapel heals; pumps fight floods.`
-        : `Digger hired. Digging wears life — chapel heals; pumps fight floods; horrors hunt deep.`
+        ? `Digger hired (free build). Idle until you set a dig target in Crew.`
+        : `Digger hired. Idle until you set a dig target in Crew.`
     );
   }
   showTutorial('crew_wood');
@@ -1938,7 +1969,7 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
 function flashBuildingRadius(uid, seconds = 2.5) {
   const b = state.buildings.find((x) => x.uid === uid);
   if (!b || !BUILDING_OVERLAY[b.id]) return;
-  drillRadiusFlash = { uid, until: performance.now() + seconds * 1000 };
+  drillRadiusFlash = { uid, until: simMs + seconds * 1000 };
 }
 
 /** @deprecated alias */
@@ -2021,7 +2052,7 @@ const PUMP_OVERLAY_WORKING_ALPHA = 0.88;
 
 /** Buildings that should show range overlays this frame. */
 function buildingRadiusMarkers() {
-  const now = performance.now();
+  const now = simMs;
   if (drillRadiusFlash && drillRadiusFlash.until < now) drillRadiusFlash = null;
   /** @type {Map<string, {b:object, alpha:number}>} */
   const picked = new Map();
@@ -2628,8 +2659,21 @@ function killWorker(w, reason) {
   lastShopSig = '';
 }
 
+/** Tree cutters re-pick the nearest tree after rest; they do not return to the last stump. */
+function workerChopsTrees(w) {
+  return (w.digFilter || 'auto') === 'wood';
+}
+
+function workerIsIdle(w) {
+  return (w.digFilter || 'auto') === 'idle';
+}
+
 /** Remember where this digger was working before they went to rest. */
 function bookmarkDigResume(w) {
+  if (workerIsIdle(w) || workerChopsTrees(w)) {
+    w.digResume = null;
+    return;
+  }
   if (w.job && typeof w.job.standX === 'number') {
     w.digResume = { x: w.job.standX | 0, y: w.job.standY | 0 };
   } else {
@@ -2769,7 +2813,15 @@ function stepWorkers(dt) {
       continue;
     }
 
-    // After rest: walk back to the dig face before seeking work from camp
+    // Idle hires stand where they are. Tree cutters forget the last stump.
+    if (workerIsIdle(w) || workerChopsTrees(w)) w.digResume = null;
+    if (workerIsIdle(w)) {
+      w.job = null;
+      w.jobBlocked = false;
+      continue;
+    }
+
+    // After rest: diggers walk back to the face. Tree cutters seek the nearest tree instead.
     if (stepReturnToDigResume(w, speed, dt)) continue;
 
     w.cooldown = Math.max(0, w.cooldown - dt);
@@ -2983,6 +3035,7 @@ function jobValid(job) {
 }
 
 function pickJob(w) {
+  if (workerIsIdle(w)) return null;
   const sx = Math.floor(w.x);
   const sy = Math.floor(w.y);
   const filter = digFilterById(w.digFilter || 'auto');
@@ -3000,6 +3053,19 @@ function pickJob(w) {
     if (filter.match && !filter.match.includes(id)) return false;
     return true;
   };
+  // Tree cutters: nearest reachable tree from where they stand (after rest, that is camp).
+  if (filter.id === 'wood') {
+    return findTarget(
+      state.world,
+      sx,
+      sy,
+      pred,
+      72,
+      shaftTileIsDry,
+      (_nx, _ny, _sx, _sy, dist) => -dist * 80
+    );
+  }
+
   // Only path / stand on dry shaft (pump pockets OK); wet diggers flee instead
   const direct = findTarget(state.world, sx, sy, pred, 72, shaftTileIsDry, bias);
   if (direct) return direct;
@@ -3345,33 +3411,52 @@ function appendShopGroup(parent, label) {
   return h;
 }
 
+function noteBagClaims() {
+  if (!state.bagSeen) state.bagSeen = {};
+  for (const [k, n] of Object.entries(state.bags || {})) {
+    if (n > 0) state.bagSeen[k] = true;
+  }
+}
+
 function renderBagBar() {
   if (!els.bags) return;
+  noteBagClaims();
   els.bags.innerHTML = '';
   for (const group of RESOURCE_GROUPS) {
     const visible = group.keys.filter((k) => {
       const n = state.bags[k] || 0;
       if (n > 0) return true;
       if (BAG_PINNED.includes(k)) return true;
-      return false;
+      return !!state.bagSeen[k];
     });
     if (!visible.length) continue;
-    const sep = document.createElement('li');
-    sep.className = 'bag-sep';
-    sep.textContent = group.label;
-    sep.setAttribute('aria-hidden', 'true');
-    els.bags.appendChild(sep);
+    const chips = [];
     for (const k of visible) {
       const meta = RESOURCE_META[k];
       if (!meta) continue;
       const n = state.bags[k] || 0;
-      const li = document.createElement('li');
-      if (!n) li.classList.add('is-empty');
+      const chip = document.createElement('span');
+      chip.className = 'bag-chip' + (n ? '' : ' is-empty');
       const a = document.createElement('span');
       a.textContent = meta.name;
       const b = document.createElement('strong');
       b.textContent = String(n);
-      li.append(a, b);
+      chip.append(a, b);
+      chips.push(chip);
+    }
+    if (!chips.length) continue;
+    const lead = document.createElement('li');
+    lead.className = 'bag-lead';
+    const sep = document.createElement('span');
+    sep.className = 'bag-sep';
+    sep.textContent = group.label;
+    sep.setAttribute('aria-hidden', 'true');
+    lead.append(sep, chips[0]);
+    els.bags.appendChild(lead);
+    for (let i = 1; i < chips.length; i++) {
+      const li = document.createElement('li');
+      li.className = chips[i].className;
+      li.append(...chips[i].childNodes);
       els.bags.appendChild(li);
     }
   }
@@ -3887,6 +3972,7 @@ function focusWorker(w) {
 
 function crewStateLabel(w) {
   if (w.resting || w.energy <= 0) return 'resting';
+  if (workerIsIdle(w)) return 'idle';
   if (w.jobBlocked) return 'stuck · no job';
   if (w.job) return `digging (${w.job.x},${w.job.y})`;
   return 'seeking';
@@ -3969,7 +4055,8 @@ function renderCrew() {
     num.textContent = String(i + 1);
     const meta = document.createElement('span');
     meta.className = 'crew-meta';
-    meta.innerHTML = `<span class="crew-filter">Digs ${filter.label}</span><span class="crew-state${blocked ? ' is-blocked' : ''}">${crewStateLabel(w)}</span>`;
+    const focus = filter.id === 'idle' ? 'Idle' : `Digs ${filter.label}`;
+    meta.innerHTML = `<span class="crew-filter">${focus}</span><span class="crew-state${blocked ? ' is-blocked' : ''}">${crewStateLabel(w)}</span>`;
     const meters = document.createElement('span');
     meters.className = 'crew-meters';
     const energy = document.createElement('span');
@@ -3996,7 +4083,8 @@ function renderCrew() {
         w.jobBlocked && !w.resting
           ? ' · no reachable dig for this filter (loosen orders or dig a path)'
           : '';
-      return `Focus · digs ${f.label} · ${crewStateLabel(w)}${stuck} · life ${r.lifePct}% (${Math.ceil(r.v)}/${r.maxV}) — chapel heals while resting`;
+      const focus = f.id === 'idle' ? 'idle' : `digs ${f.label}`;
+      return `Focus · ${focus} · ${crewStateLabel(w)}${stuck} · life ${r.lifePct}% (${Math.ceil(r.v)}/${r.maxV}) — chapel heals while resting`;
     });
     btn.addEventListener('click', () => {
       selectedWorkerId = w.uid;
@@ -4271,8 +4359,9 @@ function renderOrdersPanel() {
     ? state.buildings.find((b) => b.uid === w.shackUid)
     : null;
   const stance = digStanceById(w.digStance || 'work');
+  const focus = filter.id === 'idle' ? 'idle' : `digs ${filter.label}`;
   els.ordersHint.textContent =
-    `Selected digger · digs ${filter.label} · heads ${heading.label} · ${stance.label}` +
+    `Selected digger · ${focus} · heads ${heading.label} · ${stance.label}` +
     (w.jobBlocked && !w.resting ? ' · stuck (no reachable dig)' : '') +
     (shack ? ` · rests at shack (${shack.x},${shack.y})` : ' · rests at nearest shack / spawn');
 
@@ -4293,9 +4382,10 @@ function renderOrdersPanel() {
     btn.addEventListener('click', () => {
       w.digFilter = f.id;
       w.job = null;
+      w.digResume = null;
       // Re-evaluate next tick — clear mark until pickJob runs again
       w.jobBlocked = false;
-      setStatus(`Orders: dig ${f.label}.`);
+      setStatus(f.id === 'idle' ? 'Orders: idle.' : `Orders: dig ${f.label}.`);
       sfx.buy();
       renderUi();
       save();
@@ -4766,7 +4856,8 @@ function bindHelpTips() {
     bindTip(
       crew,
       'Crew',
-      'Click a digger row (or on the map) to focus them and open Orders.\n' +
+        'Click a digger row (or on the map) to focus them and open Orders.\n' +
+        'New hires start idle until you set a dig target. Tree cutters, after rest, go to the nearest tree; other diggers return to the face they left.\n' +
         'Energy restores at shacks / spawn. Life (vitality) drains as they dig, in flooded shaft, and when horrors hit — chapels heal life while resting nearby.\n' +
         'Stance: Work, Flee (run from horrors), or Stand ground (militia damage when hit).\n' +
         'Amber “stuck · no job” means their dig filter has nothing reachable they can scratch — loosen Orders or dig a path.\n' +
@@ -5271,6 +5362,11 @@ function onPointerUp(e) {
   }
 
   selectedBuildingUid = null;
+  if (paused) {
+    setStatus('Paused — digging is frozen.');
+    renderUi();
+    return;
+  }
   digAt(tx, ty, digPower(state), true);
   renderUi();
   save();
@@ -5311,67 +5407,95 @@ function onWheel(e) {
   }
 }
 
+function syncPauseChrome() {
+  document.body.classList.toggle('is-paused', paused);
+  els.canvas?.parentElement?.classList.toggle('is-paused', paused);
+  const btn = els.pauseBtn;
+  if (!btn) return;
+  const label = btn.querySelector('.pause-label');
+  if (label) label.textContent = paused ? 'Resume' : 'Pause';
+  btn.classList.toggle('is-paused', paused);
+  btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+  btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause simulation');
+  btn.title = paused ? 'Resume (Space)' : 'Pause simulation (Space)';
+}
+
+function togglePause() {
+  paused = !paused;
+  syncPauseChrome();
+  setStatus(
+    paused
+      ? 'Paused. Simulation is frozen and digging is frozen — building, hiring, and selling still work.'
+      : 'Resumed.'
+  );
+}
+
 function loop(ts) {
   if (!loop.last) loop.last = ts;
-  const dt = Math.min(0.05, (ts - loop.last) / 1000);
+  const frameDt = Math.min(0.05, (ts - loop.last) / 1000);
   loop.last = ts;
-  state.time += dt;
 
-  stepWorkers(dt);
-  stepMonsters(dt);
-  stepBuildings(dt);
-  stepWeather(dt);
-  fx.update(dt);
+  if (!paused) {
+    const dt = frameDt;
+    simMs += dt * 1000;
+    state.time += dt;
 
-  // Natural sky-pad regrowth (no grove needed): attempt every ~14s @ 22% → ~1 tree / 64s
-  treeTimer += dt;
-  if (treeTimer > 14) {
-    treeTimer = 0;
-    const sproutX = regrowTrees(state.world, state.buildings, 0.22);
-    if (sproutX != null) {
-      fx.floatText(sproutX, state.world.surfaceY - 1, '+sprout', '#6a9a5a');
-    }
-  }
+    stepWorkers(dt);
+    stepMonsters(dt);
+    stepBuildings(dt);
+    stepWeather(dt);
+    fx.update(dt);
 
-  saveTimer += dt;
-  if (saveTimer > 4) {
-    saveTimer = 0;
-    save();
-  }
-
-  uiClock += dt;
-  if (uiClock > 0.5) {
-    uiClock = 0;
-    // Auto-sell before bag/coin HUD so excess is cleared once per ui tick
-    const autoSold = tickMarketAutoSell();
-    if (autoSold) {
-      lastShopSig = shopResourceSig();
-      renderUi();
-    } else {
-      els.coins.textContent = String(Math.floor(state.coins));
-      els.shards.textContent = String(state.shards);
-      const depth = deepestClearedTowardCore(state.world);
-      els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
-      els.depth.textContent = `${Math.floor(depth * 100)}%`;
-      if (els.layer) els.layer.textContent = digLayerAt(depth).name;
-      const sig = shopResourceSig();
-      if (sig !== lastShopSig) {
-        lastShopSig = sig;
-        renderUi();
-      } else {
-        // Life / energy meters tick without rebuilding the whole shop
-        refreshCrewMeters();
-        refreshMenuBadges();
-        if (refreshSeenTypes()) {
-          // Fog just exposed a gated type — unlock dig filters without full shop rebuild
-          if (selectedWorkerId) renderOrdersPanel();
-          fireRevealTutorials();
-        }
-        checkDepthAchievements();
+    // Natural sky-pad regrowth (no grove needed): attempt every ~14s @ 22% → ~1 tree / 64s
+    treeTimer += dt;
+    if (treeTimer > 14) {
+      treeTimer = 0;
+      const sproutX = regrowTrees(state.world, state.buildings, 0.22);
+      if (sproutX != null) {
+        fx.floatText(sproutX, state.world.surfaceY - 1, '+sprout', '#6a9a5a');
       }
     }
-    refreshWeatherHud();
-    updateInspect();
+
+    saveTimer += dt;
+    if (saveTimer > 4) {
+      saveTimer = 0;
+      save();
+    }
+
+    uiClock += dt;
+    if (uiClock > 0.5) {
+      uiClock = 0;
+      // Auto-sell before bag/coin HUD so excess is cleared once per ui tick
+      const autoSold = tickMarketAutoSell();
+      if (autoSold) {
+        lastShopSig = shopResourceSig();
+        renderUi();
+      } else {
+        els.coins.textContent = String(Math.floor(state.coins));
+        els.shards.textContent = String(state.shards);
+        const depth = deepestClearedTowardCore(state.world);
+        els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
+        els.depth.textContent = `${Math.floor(depth * 100)}%`;
+        if (els.layer) els.layer.textContent = digLayerAt(depth).name;
+        const sig = shopResourceSig();
+        if (sig !== lastShopSig) {
+          lastShopSig = sig;
+          renderUi();
+        } else {
+          // Life / energy meters tick without rebuilding the whole shop
+          refreshCrewMeters();
+          refreshMenuBadges();
+          if (refreshSeenTypes()) {
+            // Fog just exposed a gated type — unlock dig filters without full shop rebuild
+            if (selectedWorkerId) renderOrdersPanel();
+            fireRevealTutorials();
+          }
+          checkDepthAchievements();
+        }
+      }
+      refreshWeatherHud();
+      updateInspect();
+    }
   }
 
   const senseTier = echoSenseTier(state);
@@ -5402,6 +5526,7 @@ function loop(ts) {
     buildingRadii: buildingRadiusMarkers(),
     echoSense,
     workerDrop,
+    animNow: simMs,
   });
   requestAnimationFrame(loop);
 }
@@ -5442,7 +5567,7 @@ function cheatSpawnWorkerFree() {
     energy: workerMaxEnergy(state),
     vitality: workerMaxVitality(state),
     resting: false,
-    digFilter: 'auto',
+    digFilter: 'idle',
     digHeading: 'down',
     digStance: 'work',
     shackUid: null,
@@ -5694,6 +5819,7 @@ function boot() {
   window.addEventListener('resize', () => {
     renderer.resize();
     refreshHoverAfterCamera();
+    syncInspectMarquee();
   });
   // passive:false so touch preventDefault can stop Chromium scroll/zoom steal
   els.canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
@@ -5815,6 +5941,12 @@ function boot() {
     els.ending.classList.add('hidden');
     els.ending.setAttribute('aria-hidden', 'true');
   });
+  if (els.pauseBtn) {
+    els.pauseBtn.addEventListener('click', () => {
+      unlockAudio();
+      togglePause();
+    });
+  }
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (els.cheatPanel && !els.cheatPanel.classList.contains('hidden')) {
@@ -5840,6 +5972,14 @@ function boot() {
         e.target.tagName === 'TEXTAREA' ||
         e.target.tagName === 'SELECT' ||
         e.target.isContentEditable);
+    if (!typing && (e.code === 'Space' || e.key === 'p' || e.key === 'P')) {
+      const tag = e.target && e.target.tagName;
+      if (tag !== 'BUTTON' && tag !== 'A') {
+        e.preventDefault();
+        togglePause();
+        return;
+      }
+    }
     // Menu rail: 1…N toggles dock panel (matches slot-keys / DOCK_PANEL_IDS)
     if (!typing && /^[1-9]$/.test(e.key)) {
       const idx = Number(e.key) - 1;

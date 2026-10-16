@@ -408,7 +408,7 @@ export const BUILDINGS = {
     id: 'listening',
     name: 'Listening post',
     role: 'Survey',
-    cost: { coins: 55, wood: 8, stone: 10, fragment: 1 },
+    cost: { coins: 55, wood: 8, stone: 10 },
     max: 1,
     blurb:
       'Tunes Echo Sense to the buried cube — a wide vague pulse and rough camp bearing (no fog clear). Echo Sense shards and Focus optics tighten the search. Place in the shaft. Max 1.',
@@ -707,7 +707,7 @@ export const MONSTER = {
 /** Dig filters for crew orders. */
 /**
  * Tile ids that unlock dig filters once fog-revealed (sticky for the run).
- * Dirt/grass stay always-on; Anything never gates.
+ * Dirt/grass stay always-on; Idle and Anything never gate.
  */
 export const SEEN_DIG_TYPES = [
   'stone',
@@ -726,6 +726,13 @@ export const SEEN_DIG_TYPES = [
 ];
 
 export const DIG_FILTERS = [
+  {
+    id: 'idle',
+    label: 'Idle',
+    short: '–',
+    match: [],
+    blurb: 'Stand still until you assign a dig target. New hires start here.',
+  },
   { id: 'auto', label: 'Anything', short: 'A', match: null, blurb: 'Dig whatever they can scratch.' },
   { id: 'soft', label: 'Dirt / grass', short: 'D', match: ['dirt', 'grass'], blurb: 'Clear soft ground only.' },
   {
@@ -781,7 +788,8 @@ export const DIG_FILTERS = [
     label: 'Trees',
     short: 'W',
     match: ['tree'],
-    blurb: 'Chop trees on top of the world.',
+    blurb:
+      'Chop trees on top of the world. After resting, walk to the nearest tree instead of the last stump.',
     requireSeen: 'tree',
   },
   {
@@ -827,7 +835,11 @@ export const DIG_FILTERS = [
 ];
 
 export function digFilterById(id) {
-  return DIG_FILTERS.find((f) => f.id === id) || DIG_FILTERS[0];
+  return (
+    DIG_FILTERS.find((f) => f.id === id) ||
+    DIG_FILTERS.find((f) => f.id === 'auto') ||
+    DIG_FILTERS[0]
+  );
 }
 
 /** Dig heading — how diggers choose among reachable faces (Orders panel). */
@@ -1012,7 +1024,7 @@ export const TUTORIAL_TIPS = [
   {
     id: 'hire_digger',
     title: 'Hire a digger',
-    text: 'Hire a digger in Crew (3). They chop and dig while you manage buildings and sales.',
+    text: 'Hire a digger in Crew (3). They start idle — set a dig target (trees, ore, Anything) before they work.',
   },
   {
     id: 'crew_wood',
@@ -1089,16 +1101,16 @@ export const WIKI_SECTIONS = [
       'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Hard reset clears everything including tips.',
-      'Drag diggers on the map to reposition them. After resting they return to their last dig stand.',
+      'Drag diggers on the map to reposition them. After resting they return to their last dig stand. Pause (HUD or Space) freezes the simulation and digging — crew, monsters, plants, weather, and floods stay still. Building, hiring, and selling still work.',
     ],
   },
   {
     id: 'resources',
     title: 'Resources',
     paragraphs: [
-      'Bags hold everything you dig or craft. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
+      'Bags hold everything you dig or craft. Once a resource has been in the bag this dig, its chip stays at 0 instead of disappearing. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
       'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick).',
-      'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Listening Post / wards. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
+      'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on the Chapel and Ward posts. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
       'Menus: Build (Surface / Shaft / Survive), Market (by resource group), Crew, Shop (coin upgrades), Echo (prestige + ◆).',
@@ -1128,7 +1140,8 @@ export const WIKI_SECTIONS = [
     id: 'crew',
     title: 'Crew & orders',
     paragraphs: [
-      'Hire diggers in Crew. Dig filters, headings (Down / Widen / Toward core), home shack, and combat stance.',
+      'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Home shack and combat stance too.',
+      'Tree cutters, after a rest, walk to the nearest tree. Other diggers return to the face they left.',
       'Stance: Work (default), Flee (run to rest when a horror closes in), Stand ground (militia diggers chip horror HP when hit).',
       'Rest restores energy at shacks/cottage; chapels heal vitality. Pumps keep flood pockets dry. Ward posts burn deep horrors — Bright wards boost radius and DPS.',
     ],
