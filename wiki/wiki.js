@@ -850,7 +850,7 @@ function mechanicBody(id) {
         <ul>
           <li>${link('#/shard/perm_sense', 'Echo Sense')} shard upgrades sharpen the pulse.</li>
           <li>${link('#/upgrade/focus_optics', 'Focus optics')} needs ${itemLink('crystalLens')}.</li>
-          <li>Toward core heading unlocks with sense (or after shell fog reveals).</li>
+          <li>Toward core stays locked in Crew until fog reveals the core tile. Echo Sense does not unlock it.</li>
         </ul>`;
     default:
       return null;

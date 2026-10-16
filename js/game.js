@@ -1038,10 +1038,9 @@ function echoSenseCardinal() {
   return dx > 0 ? 'east of camp' : 'west of camp';
 }
 
-/** Toward-core Orders unlock: Listening Post sense or fog-revealed shell. */
+/** Toward-core Orders unlock only after fog has revealed the core tile. */
 function towardCoreHeadingUnlocked() {
-  if (echoSenseTier(state) >= 1) return true;
-  return !!(state.seenTypes && state.seenTypes.shell);
+  return !!(state.seenTypes && state.seenTypes.core);
 }
 
 function ensureWorkerDigHeading(w) {
@@ -4447,7 +4446,7 @@ function renderOrdersPanel() {
       btn,
       h.label,
       locked
-        ? `${h.blurb}\nLocked — build a Listening Post (or reveal cube shell fog).`
+        ? `${h.blurb}\nLocked until fog reveals the core.`
         : h.blurb
     );
     btn.addEventListener('click', () => {
@@ -4909,7 +4908,7 @@ function bindHelpTips() {
         },
         { text: senseLine },
         {
-          text: 'Toward core unlocks with Echo Sense or after fog reveals cube shell. Filters for shell / seal / core appear only after fog reveals that layer. Stand ground chips horrors when hit; Flee runs to rest.',
+          text: 'Toward core stays locked until fog reveals the core. Filters for shell / seal / core appear only after fog reveals that layer. Stand ground chips horrors when hit; Flee runs to rest.',
           muted: true,
         },
       ];

@@ -860,7 +860,7 @@ export const DIG_HEADINGS = [
     id: 'toward_core',
     label: 'Toward core',
     blurb:
-      'Bias digs toward the buried cube among revealed tiles. Needs Echo Sense (Listening Post) or a fog-revealed shell.',
+      'Bias digs toward the buried cube among revealed tiles. Locked until fog reveals the core.',
     requireSense: true,
   },
 ];
@@ -1148,7 +1148,7 @@ export const WIKI_SECTIONS = [
     id: 'crew',
     title: 'Crew & orders',
     paragraphs: [
-      'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Home shack and combat stance too.',
+      'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Toward core stays locked until fog reveals the core tile. Home shack and combat stance too.',
       'A Seal or Core order refuses a face the pick cannot scratch. The status bar and that digger’s orders say why — usually Iron-bound pick level 6. Steel tools do not open the seal.',
       'Tree cutters, after a rest, walk to the nearest tree. Other diggers return to the face they left.',
       'Stance: Work (default), Flee (run to rest when a horror closes in), Stand ground (militia diggers chip horror HP when hit).',

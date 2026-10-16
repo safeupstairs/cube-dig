@@ -39,6 +39,25 @@ export function createRenderer(canvas) {
     };
   }
 
+  /**
+   * Tile rectangle in CSS pixels whose edges are shared with the next tile
+   * and land on whole device pixels. Fractional zoom then cannot open a seam.
+   */
+  function tileScreenRect(tx, ty, shake = { x: 0, y: 0 }) {
+    const cssW = canvas.clientWidth || canvas.width || 1;
+    const cssH = canvas.clientHeight || canvas.height || 1;
+    const sx = canvas.width / cssW;
+    const sy = canvas.height / cssH;
+    const tw = TILE * cam.zoom;
+    const ox = cssW / 2 + (shake.x || 0);
+    const oy = cssH / 2 + (shake.y || 0);
+    const x0 = Math.round((ox + (tx - cam.x) * tw) * sx) / sx;
+    const y0 = Math.round((oy + (ty - cam.y) * tw) * sy) / sy;
+    const x1 = Math.round((ox + (tx + 1 - cam.x) * tw) * sx) / sx;
+    const y1 = Math.round((oy + (ty + 1 - cam.y) * tw) * sy) / sy;
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+
   function screenToWorld(sx, sy) {
     const tw = TILE * cam.zoom;
     return {
@@ -66,6 +85,18 @@ export function createRenderer(canvas) {
     const base = def.color;
     const edge = def.edge || base;
     const hi = def.hi || base;
+    const right = px + cw;
+    const bottom = py + ch;
+    /** Stay inside the cell so a bevel cannot antialias into a dug neighbor. */
+    const fillIn = (x0, y0, w0, h0, color) => {
+      const a = Math.max(px, x0);
+      const b = Math.max(py, y0);
+      const c = Math.min(right, x0 + w0);
+      const d = Math.min(bottom, y0 + h0);
+      if (c <= a || d <= b) return;
+      ctx.fillStyle = color;
+      ctx.fillRect(a, b, c - a, d - b);
+    };
     ctx.fillStyle = base;
     ctx.fillRect(px, py, cw, ch);
 
@@ -77,8 +108,7 @@ export function createRenderer(canvas) {
         const bit = (h0 >> ((row * 4 + col) & 31)) & 1;
         if (!bit) continue;
         if (((x + col + y + row) & 1) === 0) continue;
-        ctx.fillStyle = edge;
-        ctx.fillRect(px + col * cell, py + row * cell, Math.max(1, cell - 1), Math.max(1, cell - 1));
+        fillIn(px + col * cell, py + row * cell, Math.max(1, cell - 1), Math.max(1, cell - 1), edge);
       }
     }
     // Highlight speckles
@@ -87,17 +117,20 @@ export function createRenderer(canvas) {
       if (((h1 >> (i * 5)) & 7) < 3) continue;
       const sx = ((h1 >> (i * 3)) & 7) / 8;
       const sy = ((h1 >> (i * 4 + 2)) & 7) / 8;
-      ctx.fillStyle = hi;
-      ctx.fillRect(px + sx * cw, py + sy * ch, Math.max(1, cell * 0.6), Math.max(1, cell * 0.6));
+      fillIn(px + sx * cw, py + sy * ch, Math.max(1, cell * 0.6), Math.max(1, cell * 0.6), hi);
     }
 
-    // Beveled edges (stone / wood feel)
-    ctx.fillStyle = hi;
-    ctx.fillRect(px, py, cw, Math.max(1, Math.floor(ch * 0.08)));
-    ctx.fillRect(px, py, Math.max(1, Math.floor(cw * 0.08)), ch);
-    ctx.fillStyle = edge;
-    ctx.fillRect(px, py + ch - Math.max(2, Math.floor(ch * 0.14)), cw, Math.max(2, Math.floor(ch * 0.14)));
-    ctx.fillRect(px + cw - Math.max(2, Math.floor(cw * 0.12)), py, Math.max(2, Math.floor(cw * 0.12)), ch);
+    // Beveled edges stay one device pixel inside the cell so they cannot
+    // bleed a brown sliver into a neighboring dug tile.
+    const pad = (canvas.clientWidth || canvas.width || 1) / (canvas.width || 1);
+    const topH = Math.max(pad, Math.min(ch * 0.5, Math.floor(ch * 0.08)));
+    const leftW = Math.max(pad, Math.min(cw * 0.5, Math.floor(cw * 0.08)));
+    const botH = Math.max(pad * 2, Math.min(ch * 0.5, Math.floor(ch * 0.14)));
+    const rightW = Math.max(pad * 2, Math.min(cw * 0.5, Math.floor(cw * 0.12)));
+    fillIn(px + pad, py + pad, cw - pad * 2, topH, hi);
+    fillIn(px + pad, py + pad, leftW, ch - pad * 2, hi);
+    fillIn(px + pad, bottom - pad - botH, cw - pad * 2, botH, edge);
+    fillIn(right - pad - rightW, py + pad, rightW, ch - pad * 2, edge);
 
     // Ore / special veins
     if (id === 'coal' || id === 'iron' || id === 'gold' || id === 'crystal') {
@@ -140,8 +173,7 @@ export function createRenderer(canvas) {
       ctx.fillRect(px + cw * 0.15, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.2));
       ctx.fillRect(px + cw * 0.45, py, Math.max(1, cw * 0.1), Math.max(2, ch * 0.22));
       ctx.fillRect(px + cw * 0.72, py + 1, Math.max(1, cw * 0.08), Math.max(2, ch * 0.18));
-      ctx.fillStyle = edge;
-      ctx.fillRect(px, py + ch * 0.55, cw, ch * 0.45);
+      fillIn(px, py + ch * 0.55, cw, bottom - (py + ch * 0.55), edge);
     }
   }
 
@@ -404,6 +436,7 @@ export function createRenderer(canvas) {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     const shake = fx?.shakeOffset?.() || { x: 0, y: 0 };
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, w, h);
 
     const phase = state.weather?.phase || 'clear';
@@ -455,15 +488,56 @@ export function createRenderer(canvas) {
     const x1 = Math.min(world.w - 1, Math.ceil(botRight.x) + 1);
     const y1 = Math.min(world.h - 1, Math.ceil(botRight.y) + 1);
 
+    function paintDugTile(x, y) {
+      const cell = tileScreenRect(x, y, shake);
+      const px = cell.x;
+      const py = cell.y;
+      const cw = cell.w;
+      const ch = cell.h;
+      const wet = tileFlooded(x, y);
+      const wetTop = wet && tileFloodSurface(x, y);
+      const deep = y > world.surfaceY + 8;
+      ctx.fillStyle = wet
+        ? wetTop
+          ? '#2a4860'
+          : deep
+            ? '#152838'
+            : '#1a3040'
+        : deep
+          ? '#12181e'
+          : '#1a242c';
+      ctx.fillRect(px, py, cw, ch);
+      if (!wet) {
+        const sh = hash2(x + 3, y + 9);
+        if ((sh & 7) === 0) {
+          ctx.fillStyle = deep ? '#1a2228' : '#243038';
+          ctx.fillRect(px + cw * 0.15, py + ch * 0.3, Math.max(1, Math.min(cw * 0.12, cw * 0.5)), Math.max(1, Math.min(ch * 0.08, ch * 0.4)));
+        }
+      }
+      if (wet) {
+        if (wetTop) {
+          const bandY = py + ch * 0.45;
+          ctx.fillStyle = 'rgba(74, 140, 180, 0.22)';
+          ctx.fillRect(px, bandY, cw, py + ch - bandY);
+          ctx.fillStyle = 'rgba(180, 210, 230, 0.35)';
+          ctx.fillRect(px, py, cw, Math.min(ch, Math.max(2, ch * 0.18)));
+        } else {
+          ctx.fillStyle = 'rgba(50, 110, 150, 0.38)';
+          ctx.fillRect(px, py, cw, ch);
+        }
+      }
+    }
+
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const i = y * world.w + x;
         const revealed = world.revealed[i];
-        const s = worldToScreen(x, y, shake);
-        const px = Math.floor(s.x);
-        const py = Math.floor(s.y);
-        const cw = Math.ceil(tw);
-        const ch = Math.ceil(tw);
+        const cell = tileScreenRect(x, y, shake);
+        const px = cell.x;
+        const py = cell.y;
+        const cw = cell.w;
+        const ch = cell.h;
+        const span = Math.max(cw, ch);
 
         if (!revealed) {
           ctx.fillStyle = '#080a0c';
@@ -485,70 +559,19 @@ export function createRenderer(canvas) {
 
         if (id === 'sky') continue;
 
-        if (id === 'empty') {
-          const wet = tileFlooded(x, y);
-          const wetTop = wet && tileFloodSurface(x, y);
-          const deep = y > world.surfaceY + 8;
-          ctx.fillStyle = wet
-            ? wetTop
-              ? '#2a4860'
-              : deep
-                ? '#152838'
-                : '#1a3040'
-            : deep
-              ? '#12181e'
-              : '#1a242c';
-          ctx.fillRect(px, py, cw, ch);
-          // Shaft wall dither / timber hints
-          if (!wet) {
-            const sh = hash2(x + 3, y + 9);
-            if ((sh & 7) === 0) {
-              ctx.fillStyle = deep ? '#1a2228' : '#243038';
-              ctx.fillRect(px + cw * 0.1, py + ch * 0.3, Math.max(1, cw * 0.12), Math.max(1, ch * 0.08));
-            }
-            if (deep && (sh & 15) === 2) {
-              // Timber brace silhouette
-              ctx.fillStyle = '#3a2a1a';
-              ctx.fillRect(px + 1, py + ch * 0.4, Math.max(1, cw * 0.08), Math.max(2, ch * 0.35));
-            }
-          }
-          if (wet) {
-            if (wetTop) {
-              // Surface only — darker top bar + shimmer (not on submerged tiles)
-              ctx.fillStyle = 'rgba(74, 140, 180, 0.22)';
-              ctx.fillRect(px, py + ch * 0.45, cw, ch * 0.55);
-              ctx.fillStyle = 'rgba(180, 210, 230, 0.35)';
-              ctx.fillRect(px, py, cw, Math.max(2, ch * 0.18));
-              if (((x + y) & 3) === 0) {
-                ctx.fillStyle = 'rgba(210, 230, 245, 0.4)';
-                ctx.fillRect(px + cw * 0.3, py + 1, 2, 2);
-              }
-            } else {
-              // Underwater — full tint, no top bar
-              ctx.fillStyle = 'rgba(50, 110, 150, 0.38)';
-              ctx.fillRect(px, py, cw, ch);
-              if (((x * 3 + y) & 7) === 0) {
-                ctx.fillStyle = 'rgba(90, 140, 170, 0.2)';
-                ctx.fillRect(px + cw * 0.4, py + ch * 0.4, 2, 2);
-              }
-            }
-          }
-          ctx.strokeStyle = 'rgba(255,255,255,0.035)';
-          ctx.strokeRect(px + 0.5, py + 0.5, tw - 1, tw - 1);
-          continue;
-        }
+        if (id === 'empty') continue;
 
         // Trees sit on the sky pad — pine silhouette (sky shows through)
         if (id === 'tree') {
-          drawPineTree(px, py, tw);
+          drawPineTree(px, py, span);
         } else {
-          drawTexturedTile(px, py, cw, ch, tw, x, y, def, id);
+          drawTexturedTile(px, py, cw, ch, span, x, y, def, id);
         }
 
         if (id === 'seal' || id === 'core') {
           ctx.globalAlpha = 0.2 + 0.15 * Math.sin(animNow / 350 + x * 0.4 + y);
           ctx.fillStyle = '#fff';
-          ctx.fillRect(px + 2, py + 2, tw - 4, 2);
+          ctx.fillRect(px + 2, py + 2, Math.max(1, cw - 4), 2);
           ctx.globalAlpha = 1;
         }
 
@@ -556,14 +579,24 @@ export function createRenderer(canvas) {
         if (world.hp[i] < maxHp) {
           const hurt = 1 - world.hp[i] / maxHp;
           ctx.fillStyle = `rgba(0,0,0,${0.12 + hurt * 0.4})`;
-          ctx.fillRect(px, py, tw, tw * Math.min(1, hurt * 0.85));
+          ctx.fillRect(px, py, cw, ch * Math.min(1, hurt * 0.85));
           ctx.strokeStyle = `rgba(0,0,0,${0.25 + hurt * 0.4})`;
           ctx.beginPath();
-          ctx.moveTo(px + tw * 0.2, py + tw * 0.3);
-          ctx.lineTo(px + tw * 0.55, py + tw * (0.4 + hurt * 0.3));
-          ctx.lineTo(px + tw * 0.8, py + tw * 0.25);
+          ctx.moveTo(px + cw * 0.2, py + ch * 0.3);
+          ctx.lineTo(px + cw * 0.55, py + ch * (0.4 + hurt * 0.3));
+          ctx.lineTo(px + cw * 0.8, py + ch * 0.25);
           ctx.stroke();
         }
+      }
+    }
+
+    // Dug cells paint last so a neighbor's dirt bevel cannot leave a brown seam.
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * world.w + x;
+        if (!world.revealed[i]) continue;
+        if (world.ids[world.tiles[i]] !== 'empty') continue;
+        paintDugTile(x, y);
       }
     }
 
@@ -629,8 +662,8 @@ export function createRenderer(canvas) {
 
     for (const tomb of state.tombstones || []) {
       if (!isRevealed(world, Math.floor(tomb.x), Math.floor(tomb.y))) continue;
-      const s = worldToScreen(tomb.x, tomb.y, shake);
-      drawTombstone(Math.floor(s.x), Math.floor(s.y), tw);
+      const cell = tileScreenRect(Math.floor(tomb.x), Math.floor(tomb.y), shake);
+      drawTombstone(cell.x, cell.y, cell.w);
     }
 
     // Range overlays (after fog/tiles so fog painting stays intact)
@@ -640,11 +673,9 @@ export function createRenderer(canvas) {
 
     for (const b of state.buildings) {
       if (!isRevealed(world, b.x, b.y)) continue;
-      const s = worldToScreen(b.x, b.y, shake);
-      const bx = Math.floor(s.x);
-      const by = Math.floor(s.y);
-      drawBuilding(bx, by, tw, b);
-      drawSmeltProgress(bx, by, tw, b);
+      const cell = tileScreenRect(b.x, b.y, shake);
+      drawBuilding(cell.x, cell.y, cell.w, b);
+      drawSmeltProgress(cell.x, cell.y, cell.w, b);
     }
 
     for (const m of state.monsters || []) {

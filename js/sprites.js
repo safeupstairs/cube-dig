@@ -14,9 +14,25 @@ import { TILES } from './data.js';
  * @param {number} h
  * @param {string} color
  */
+/**
+ * Fill a sprite pixel so its edges land on the same device pixels as its neighbors.
+ * Fractional zoom (tw / 16) otherwise leaves hairline gaps between art pixels.
+ */
 export function pxRect(ctx, ox, oy, x, y, w, h, color) {
+  const canvas = ctx.canvas;
+  const cssW = canvas.clientWidth || canvas.width || 1;
+  const cssH = canvas.clientHeight || canvas.height || 1;
+  const sx = canvas.width / cssW;
+  const sy = canvas.height / cssH;
+  const qx = (v) => Math.round(v * sx) / sx;
+  const qy = (v) => Math.round(v * sy) / sy;
+  const x0 = qx(ox + x);
+  const y0 = qy(oy + y);
+  const rw = qx(ox + x + w) - x0;
+  const rh = qy(oy + y + h) - y0;
+  if (rw <= 0 || rh <= 0) return;
   ctx.fillStyle = color;
-  ctx.fillRect(ox + x, oy + y, w, h);
+  ctx.fillRect(x0, y0, rw, rh);
 }
 
 /**

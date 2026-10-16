@@ -1829,13 +1829,6 @@ a.btn:hover {
 .shack-btn.is-active {
   border-color: var(--brass);
   background: linear-gradient(180deg, #3a4a2a 0%, #2a3220 100%);
-}
-
-.filter-btn.is-off.is-active {
-  border-color: var(--danger);
-  background: linear-gradient(180deg, #3a2828 0%, #221818 100%);
-  color: #e8b0a8;
-}
   color: #e8d48a;
   box-shadow:
     0 0 0 1px var(--brass-hi),
@@ -1843,10 +1836,27 @@ a.btn:hover {
     inset 1px 1px 0 #6a8a5a;
 }
 
+.filter-btn.is-off.is-active {
+  border-color: var(--danger);
+  background: linear-gradient(180deg, #3a2828 0%, #221818 100%);
+  color: #e8b0a8;
+}
+
 .filter-btn.is-locked:disabled {
-  opacity: 0.45;
+  opacity: 1;
   cursor: not-allowed;
-  color: var(--muted);
+  color: #6a7a80;
+  background: #12161a;
+  border-color: #111;
+  box-shadow: inset 0 0 0 1px #2a3238;
+}
+
+.filter-btn.is-locked:disabled::after {
+  content: " locked";
+  color: #c45c4a;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .orders-clear {
