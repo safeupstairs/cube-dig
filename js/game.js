@@ -35,6 +35,7 @@ import {
   digHeadingById,
   digLayerAt,
   digStanceById,
+  echoSensePulseCenter,
   echoSensePulseRadii,
   echoSenseTier,
   formatRecipeLine,
@@ -122,6 +123,7 @@ const els = {
   achievements: document.getElementById('achievements'),
   prestigeBtn: document.getElementById('prestige-btn'),
   prestigeBlurb: document.getElementById('prestige-blurb'),
+  prestigePayout: document.getElementById('prestige-payout'),
   status: document.getElementById('status'),
   pauseBtn: document.getElementById('pause-btn'),
   resetBtn: document.getElementById('reset-btn'),
@@ -1945,7 +1947,7 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
     unlockAchievement('echo_sense');
     const tier = echoSenseTier(state);
     setStatus(
-      `Listening Post online — Echo Sense ${tier}: cube lies ${echoSenseCardinal()}. No fog cleared.`
+      `Listening Post online — Echo Sense ${tier}: cube is somewhere in the pulse, ${echoSenseCardinal()}. No fog cleared.`
     );
     renderUi();
     save();
@@ -3406,6 +3408,7 @@ function doPrestige() {
     `Prestige ${next}. +${depthGrant}◆ from depth (${keepShards}◆ total). The crust thins — dig again.` +
       (tips.length ? ` ${tips.join(' · ')}` : '')
   );
+  showTutorial('prestige_start');
   renderUi();
   save();
 }
@@ -3723,9 +3726,15 @@ function appendShardUpgradeRow(parent, u) {
         sfx.deny();
       } else {
         const next = state.shardUpgrades[u.id] || 0;
-        setStatus(
-          next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Bought ${u.name}.`
-        );
+        if (u.id === 'perm_start') {
+          const bits = ['+2 wood', '+1 stone'];
+          if (next >= 2) bits.push('+1 iron bar');
+          setStatus(`Inheritance ${next}/${u.max}: ${bits.join(', ')} added to this dig.`);
+        } else {
+          setStatus(
+            next >= u.max ? `${u.name} maxed (${u.max}/${u.max}).` : `Bought ${u.name}.`
+          );
+        }
         sfx.buy();
       }
       renderUi();
@@ -3765,6 +3774,77 @@ function renderShardShop() {
     appendShopGroup(els.shardUpgrades, 'Maxed');
     for (const u of maxed) appendShardUpgradeRow(els.shardUpgrades, u);
   }
+}
+
+let lastPrestigePayoutSig = '';
+
+/** Echo page: live depth grant, plus 3-wide vs wide at this depth and at the core. */
+function renderPrestigePayout() {
+  if (!state?.world || !els.prestigePayout) return;
+  const depth = deepestClearedTowardCore(state.world);
+  const depthPct = Math.floor(depth * 100);
+  const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
+  const needY = prestigeUnlockDepthY(state.world);
+  const cols = countColumnsOpenToDepth(state.world, needY);
+  const canPrestige = canPrestigeWorld(state.world);
+  const breadth = prestigeShaftBreadth(state.world);
+  const now = prestigeDepthShards(depth, breadth);
+  const narrowNow = prestigeDepthShards(depth, 1);
+  const wideNow = prestigeDepthShards(depth, 2);
+  const narrowFull = prestigeDepthShards(1, 1);
+  const wideFull = prestigeDepthShards(1, 2);
+  const atUnlockN = prestigeDepthShards(PRESTIGE_DEPTH_RATIO, 1);
+  const atUnlockW = prestigeDepthShards(PRESTIGE_DEPTH_RATIO, 2);
+  const widthLabel = breadth >= 1.5 ? 'wide' : breadth >= 0.85 ? '3-wide' : 'narrow';
+  const sig = `${now}|${depthPct}|${cols}|${canPrestige}|${narrowNow}|${wideNow}|${widthLabel}`;
+  if (sig === lastPrestigePayoutSig) return;
+  lastPrestigePayoutSig = sig;
+
+  const rows = [];
+  if (narrowNow !== wideNow) {
+    rows.push({ label: 'This depth', narrow: narrowNow, wide: wideNow, you: true });
+  }
+  if (
+    depth < PRESTIGE_DEPTH_RATIO - 0.01 &&
+    (atUnlockN !== narrowNow || atUnlockW !== wideNow)
+  ) {
+    rows.push({ label: `At ${needPct}%`, narrow: atUnlockN, wide: atUnlockW });
+  }
+  if (depth < 0.99 && (narrowFull !== narrowNow || wideFull !== wideNow)) {
+    rows.push({ label: 'At core', narrow: narrowFull, wide: wideFull });
+  }
+
+  const body = rows
+    .map((row) => {
+      const markNarrow = row.you && now === row.narrow && now !== row.wide;
+      const markWide = row.you && now === row.wide && now !== row.narrow;
+      return `<tr><th>${row.label}</th><td class="${markNarrow ? 'is-you' : ''}">+${row.narrow}◆</td><td class="${markWide ? 'is-you' : ''}">+${row.wide}◆</td></tr>`;
+    })
+    .join('');
+
+  els.prestigePayout.innerHTML = `
+    <p class="prestige-now"><strong>+${now}◆</strong> from this shaft</p>
+    <p class="muted prestige-width">Depth ${depthPct}% · ${widthLabel} shaft</p>
+    <table class="prestige-scale">
+      <thead><tr><th></th><th title="A 3-wide shaft down to the prestige line">3-wide</th><th title="About twice the dug volume of a 3-wide shaft">Wide</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+
+  if (els.prestigeBlurb) {
+    if (canPrestige) {
+      els.prestigeBlurb.textContent = `Ready · ${cols} columns open to ${needPct}%`;
+    } else if (depth < PRESTIGE_DEPTH_RATIO) {
+      els.prestigeBlurb.textContent = `Need ${needPct}% depth and ${PRESTIGE_MIN_COLUMNS} open columns (now ${depthPct}%, ${cols})`;
+    } else {
+      els.prestigeBlurb.textContent = `Widen the shaft — ${cols}/${PRESTIGE_MIN_COLUMNS} columns open to ${needPct}%`;
+    }
+  }
+  if (els.prestigeBtn) {
+    els.prestigeBtn.classList.toggle('is-affordable', canPrestige);
+    els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
+    els.prestigeBtn.textContent = canPrestige ? `Prestige +${now}◆` : 'Prestige';
+  }
+  if (canPrestige) showTutorial('prestige_tip');
 }
 
 function renderUi() {
@@ -3866,26 +3946,7 @@ function renderUi() {
   renderUpgradeShop();
   renderShardShop();
 
-  const depthPct = Math.floor(depth * 100);
-  const needPct = Math.round(PRESTIGE_DEPTH_RATIO * 100);
-  const needY = prestigeUnlockDepthY(state.world);
-  const cols = countColumnsOpenToDepth(state.world, needY);
-  const canPrestige = canPrestigeWorld(state.world);
-  const breadth = prestigeShaftBreadth(state.world);
-  const previewGrant = prestigeDepthShards(depth, breadth);
-  if (els.prestigeBlurb) {
-    if (canPrestige) {
-      els.prestigeBlurb.textContent = `Ready · depth ${depthPct}% · ${cols}-wide · banks +${previewGrant}◆`;
-    } else if (depth < PRESTIGE_DEPTH_RATIO) {
-      els.prestigeBlurb.textContent = `Depth ${depthPct}% · need ${needPct}% and a ${PRESTIGE_MIN_COLUMNS}-wide shaft`;
-    } else {
-      els.prestigeBlurb.textContent = `Depth ${depthPct}% · widen shaft ${cols}/${PRESTIGE_MIN_COLUMNS} columns`;
-    }
-  }
-  els.prestigeBtn.classList.toggle('is-affordable', canPrestige);
-  els.prestigeBtn.classList.toggle('is-locked', !canPrestige);
-  els.prestigeBtn.textContent = canPrestige ? 'Prestige — ready' : 'Prestige';
-  if (canPrestige) showTutorial('prestige_tip');
+  renderPrestigePayout();
 
   renderAchievements();
   refreshMenuBadges();
@@ -4900,7 +4961,7 @@ function bindHelpTips() {
       const tier = echoSenseTier(state);
       const senseLine =
         tier > 0
-          ? `Echo Sense ${tier}: cube lies ${echoSenseCardinal()} (Listening Post pulse — no fog clear).`
+          ? `Echo Sense ${tier}: cube is somewhere in the pulse, ${echoSenseCardinal()} (no fog clear).`
           : 'Build a Listening Post for Echo Sense (vague cube bearing + pulse). Sharpen with the Echo Sense shard upgrade.';
       return [
         {
@@ -4935,7 +4996,7 @@ function bindHelpTips() {
           text: `Seals: prestige ×1 only unlocks the attempt (hardness ${sealH}). Scratch needs Iron-bound pick level 6 with no shards — Seal splitter or Inheritance can lower that. Steel tools only speed hits. Core needs prestige ×5 (hardness ${coreH}) plus an even higher scratch gate.`,
         },
         {
-          text: `Unlock: ${needPct}% depth and a ${PRESTIGE_MIN_COLUMNS}-wide open shaft to that line (now ${depthPct}%, ${cols}/${PRESTIGE_MIN_COLUMNS} cols). Wider digs bank more ◆ (preview +${grant}). Holding ◆ does not unlock prestige.`,
+          text: `Unlock: ${needPct}% depth and a ${PRESTIGE_MIN_COLUMNS}-wide open shaft to that line (now ${depthPct}%, ${cols}/${PRESTIGE_MIN_COLUMNS} cols). The Echo page lists the depth grant — deeper and wider shafts pay more (now +${grant}◆). Holding ◆ does not unlock prestige.`,
           muted: true,
         },
       ];
@@ -5509,6 +5570,7 @@ function loop(ts) {
         els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
         els.depth.textContent = `${Math.floor(depth * 100)}%`;
         if (els.layer) els.layer.textContent = digLayerAt(depth).name;
+        renderPrestigePayout();
         const sig = shopResourceSig();
         if (sig !== lastShopSig) {
           lastShopSig = sig;
@@ -5533,6 +5595,7 @@ function loop(ts) {
   const senseTier = echoSenseTier(state);
   let echoSense = null;
   if (senseTier > 0) {
+    const coreX = state.world.cubeCx ?? state.world.centerX;
     const coreY = state.world.cubeCy ?? state.world.centerY;
     const span = Math.max(1, coreY - state.world.surfaceY);
     const { rx, ry } = echoSensePulseRadii(
@@ -5540,10 +5603,11 @@ function loop(ts) {
       span,
       state.upgrades.focus_optics || 0
     );
+    const pulse = echoSensePulseCenter(state.world.seed ?? 0, coreX, coreY, rx, ry);
     echoSense = {
       tier: senseTier,
-      cx: state.world.cubeCx ?? state.world.centerX,
-      cy: coreY,
+      cx: pulse.cx,
+      cy: pulse.cy,
       rx,
       ry,
     };

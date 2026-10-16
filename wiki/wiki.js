@@ -95,7 +95,7 @@ const MECHANICS = [
   {
     id: 'echo',
     title: 'Echo Sense',
-    blurb: 'Listening Post pulses toward the cube.',
+    blurb: 'Listening Post draws a region that contains the cube.',
   },
 ];
 
@@ -782,7 +782,8 @@ function mechanicBody(id) {
         <p>Unlock at ${Math.round(PRESTIGE_DEPTH_RATIO * 100)}% depth with a ${PRESTIGE_MIN_COLUMNS}-wide open shaft.</p>
         <ul>
           <li>Resets coins, crew, buildings, and the map. Keeps ◆ and shard upgrades.</li>
-          <li>Depth grant scales with how deep/wide you dug (example at full depth ~${prestigeDepthShards(1, PRESTIGE_MIN_COLUMNS)}◆ before breadth bonuses — check Prestige panel in-run).</li>
+          <li>The next dig starts with 4 wood and 2 stone. ${link('#/shard/perm_start', 'Inheritance')} adds 2 wood and 1 stone per level (iron bars from level 2) to this dig as soon as you buy it, and again on each reset.</li>
+          <li>Depth grant: a 3-wide shaft pays ${prestigeDepthShards(PRESTIGE_DEPTH_RATIO, 1)}◆ at the unlock and ${prestigeDepthShards(1, 1)}◆ at the core. A wide shaft (about twice that dug volume) pays ${prestigeDepthShards(PRESTIGE_DEPTH_RATIO, 2)}◆ and ${prestigeDepthShards(1, 2)}◆. The Echo page shows the live grant.</li>
           <li>${tileLink('seal')} +1◆, ${tileLink('core')} +4◆.</li>
         </ul>`;
     case 'market':
@@ -846,9 +847,9 @@ function mechanicBody(id) {
         ).join('')}</tbody></table>`;
     case 'echo':
       return `
-        <p>Build a ${buildingLink('listening')} for Echo Sense tier 1: vague pulse + camp bearing toward the cube (no fog clear).</p>
+        <p>Build a ${buildingLink('listening')} for Echo Sense tier 1: a wide pulse that contains the cube somewhere inside it (not at the center), plus a rough camp bearing. No fog clear.</p>
         <ul>
-          <li>${link('#/shard/perm_sense', 'Echo Sense')} shard upgrades sharpen the pulse.</li>
+          <li>${link('#/shard/perm_sense', 'Echo Sense')} shard upgrades shrink that region. The cube stays inside.</li>
           <li>${link('#/upgrade/focus_optics', 'Focus optics')} needs ${itemLink('crystalLens')}.</li>
           <li>Toward core stays locked in Crew until fog reveals the core tile. Echo Sense does not unlock it.</li>
         </ul>`;

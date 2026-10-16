@@ -621,7 +621,7 @@ export function createRenderer(canvas) {
       ctx.strokeRect(s.x + 2, s.y + 2, tw - 4, tw - 4);
     }
 
-    // Echo Sense pulse — soft ellipse around the cube (no fog reveal)
+    // Echo Sense pulse — search ellipse that contains the cube, not centered on it
     const sense = opts && typeof opts === 'object' ? opts.echoSense : null;
     if (sense && sense.rx > 0 && sense.ry > 0) {
       const pulse = 0.55 + 0.45 * Math.sin(animNow / 700);

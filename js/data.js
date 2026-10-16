@@ -410,7 +410,7 @@ export const BUILDINGS = {
     cost: { coins: 75, wood: 6, stone: 14 },
     max: 1,
     blurb:
-      'Tunes Echo Sense to the buried cube — a wide vague pulse and rough camp bearing (no fog clear). Echo Sense shards and Focus optics tighten the search. Place in the shaft. Max 1.',
+      'Draws a search pulse that contains the buried cube somewhere inside it — not at the center — plus a rough camp bearing (no fog clear). Echo Sense shards and Focus optics shrink the region. Place in the shaft. Max 1.',
     color: '#6a7a9a',
   },
 };
@@ -504,7 +504,7 @@ export const UPGRADES = [
   {
     id: 'focus_optics',
     name: 'Focus optics',
-    blurb: 'Slight Echo Sense sharpening (+pulse clarity). Needs crystal lenses from a Refinery.',
+    blurb: 'Shrinks the Listening Post search region a little. The cube stays somewhere inside. Needs crystal lenses from a Refinery.',
     baseCost: 140,
     max: 3,
     needsLens: true,
@@ -541,7 +541,8 @@ export const SHARD_UPGRADES = [
   {
     id: 'perm_start',
     name: 'Inheritance',
-    blurb: 'Start each run with a better pick tier / starter bars.',
+    blurb:
+      'Each level adds 2 wood and 1 stone to this dig immediately, and again on the next reset. Iron bars from level 2. Also +4 scratch per level. Resets still start with 4 wood and 2 stone before that bonus.',
     cost: 4,
     max: 3,
   },
@@ -563,7 +564,7 @@ export const SHARD_UPGRADES = [
     id: 'perm_sense',
     name: 'Echo Sense',
     blurb:
-      'Sharpens Listening Post pulses toward the cube (still no fog clear). Needs a Listening Post each run.',
+      'Shrinks the Listening Post search region. The cube stays somewhere inside the pulse (still no fog clear). Needs a Listening Post each run.',
     cost: 2,
     max: 4,
   },
@@ -587,7 +588,8 @@ export function echoSenseTier(state) {
 }
 
 /**
- * Soft pulse ellipse radii (tiles) around the cube. Shrinks as tier rises.
+ * Soft pulse ellipse radii (tiles). Shrinks as tier rises.
+ * The cube sits somewhere inside this ellipse, not at its center.
  * Tier 1 (Listening Post alone) is intentionally vague / wide; shards + optics tighten.
  * @param {number} tier
  * @param {number} span surface→core tile span
@@ -601,6 +603,31 @@ export function echoSensePulseRadii(tier, span, optics = 0) {
   const half = Math.max(0.05, 0.42 - tier * 0.07 - o * 0.025);
   const ry = Math.max(rx * 0.7, Math.max(1, span) * half);
   return { rx, ry };
+}
+
+/**
+ * Center of the Echo Sense ellipse, in tile coords.
+ * Stable per world seed. The cube is inside the ellipse and clearly off-center.
+ * @param {number} seed
+ * @param {number} cubeCx
+ * @param {number} cubeCy
+ * @param {number} rx
+ * @param {number} ry
+ */
+export function echoSensePulseCenter(seed, cubeCx, cubeCy, rx, ry) {
+  let a = (seed >>> 0) ^ 0x9e3779b9;
+  a = Math.imul(a ^ (a >>> 16), 0x7feb352d);
+  a = Math.imul(a ^ (a >>> 15), 0x846ca68b);
+  a = (a ^ (a >>> 16)) >>> 0;
+  const u = (a & 0xffff) / 0xffff;
+  const v = ((a >>> 16) & 0xffff) / 0xffff;
+  const ang = u * Math.PI * 2;
+  // Far enough from the middle to not mark the cube, close enough to stay inside the stroke.
+  const t = 0.42 + v * 0.3;
+  return {
+    cx: cubeCx - Math.cos(ang) * t * rx,
+    cy: cubeCy - Math.sin(ang) * t * ry,
+  };
 }
 
 /** Cheapest level-1 shard upgrade (Echo muscle). */
@@ -1077,6 +1104,11 @@ export const TUTORIAL_TIPS = [
     title: 'Prestige',
     text: 'Prestige unlocks at 25% depth with a 3-wide shaft. Reset keeps ◆ shards forever (Prestige tab).',
   },
+  {
+    id: 'prestige_start',
+    title: 'Next dig',
+    text: 'This dig starts with 4 wood and 2 stone. Each Inheritance level you own adds 2 wood and 1 stone. Iron bars start at Inheritance level 2.',
+  },
 ];
 
 export function tutorialById(id) {
@@ -1107,7 +1139,7 @@ export const WIKI_SECTIONS = [
       'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
       'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. The status line stays on the next step while you hover. A sale, a storm, or a seal the pick cannot scratch borrows that line, then the step returns.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
-      'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Hard reset clears everything including tips.',
+      'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Hard reset clears everything including tips.',
       'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
       'Drag diggers on the map to reposition them. After resting they return to their last dig stand. Pause (HUD or Space) freezes the simulation and digging — crew, monsters, plants, weather, and floods stay still. Building, hiring, and selling still work.',
     ],

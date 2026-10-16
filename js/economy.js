@@ -254,7 +254,15 @@ export function tryBuyShardUpgrade(state, id) {
   if (state.shards < cost) return 'Not enough shards.';
   state.shards -= cost;
   state.shardUpgrades[id] = level + 1;
+  if (id === 'perm_start') grantInheritanceLevel(state, level + 1);
   return null;
+}
+
+/** Materials for one Inheritance level, added to the dig in progress and again on reset. */
+function grantInheritanceLevel(state, tier) {
+  state.bags.wood = (state.bags.wood || 0) + 2;
+  state.bags.stone = (state.bags.stone || 0) + 1;
+  if (tier >= 2) state.bags.ironBar = (state.bags.ironBar || 0) + 1;
 }
 
 // Re-export for UI that lists buildings (keeps import path stable)

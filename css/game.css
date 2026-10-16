@@ -873,6 +873,61 @@ body.is-paused .inspect.is-marquee .inspect-text {
   line-height: 1.25;
 }
 
+.prestige-payout {
+  margin: 0 0 0.45rem;
+}
+
+.prestige-now {
+  margin: 0 0 0.15rem;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.prestige-now strong {
+  color: var(--brass-hi);
+  font-size: 1.15rem;
+}
+
+.prestige-width {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.prestige-scale {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.prestige-scale th,
+.prestige-scale td {
+  padding: 0.12rem 0.25rem;
+  text-align: right;
+  border-bottom: 1px solid rgba(196, 163, 90, 0.22);
+}
+
+.prestige-scale th:first-child,
+.prestige-scale td:first-child {
+  text-align: left;
+  color: var(--muted, #9aa4a8);
+  font-weight: 400;
+}
+
+.prestige-scale thead th {
+  font-family: var(--pixel);
+  font-size: 0.38rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.prestige-scale td.is-you {
+  color: var(--brass-hi);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--brass);
+}
+
 .panel-subtitle {
   margin: 0.85rem 0 0.35rem;
   font-family: var(--pixel);
