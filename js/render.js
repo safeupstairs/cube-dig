@@ -261,7 +261,7 @@ export function createRenderer(canvas) {
   }
 
   function drawBuilding(px, py, tw, b) {
-    drawBuildingSprite(ctx, px, py, tw, b);
+    drawBuildingSprite(ctx, px, py, tw, { ...b, outline: false });
   }
 
   /** Thin craft progress bar above smelters / refineries while working. */
@@ -649,7 +649,7 @@ export function createRenderer(canvas) {
 
     for (const m of state.monsters || []) {
       if (!isRevealed(world, Math.floor(m.x), Math.floor(m.y))) continue;
-      const s = worldToScreen(m.x, m.y, shake);
+      const s = worldToScreen(m.x - 0.5, m.y - 0.5, shake);
       drawMonster(Math.floor(s.x), Math.floor(s.y), tw, m);
     }
 
@@ -659,7 +659,7 @@ export function createRenderer(canvas) {
         // Dim original while the ghost follows the pointer
         ctx.globalAlpha = 0.35;
       }
-      const s = worldToScreen(wkr.x, wkr.y, shake);
+      const s = worldToScreen(wkr.x - 0.5, wkr.y - 0.5, shake);
       drawWorker(s.x, s.y, tw, wkr, wkr.uid === selectedWorkerId, i + 1);
       if (draggingThis) ctx.globalAlpha = 1;
     });

@@ -15,25 +15,29 @@
           <h1>The Cube Dig</h1>
           <p class="tag">Dig deep. Keep the crew alive. Crack the cube.</p>
         </div>
-        <div class="inspect-slot">
-          <div id="inspect" class="inspect" aria-live="polite">
-            <span id="inspect-text" class="inspect-text">Hover a tile…</span>
-          </div>
-        </div>
         <div class="meters">
           <button type="button" id="pause-btn" class="pause-btn" aria-pressed="false" aria-label="Pause simulation" title="Pause simulation (Space)">
             <span class="pause-glyph" aria-hidden="true"></span>
             <span class="pause-label">Pause</span>
           </button>
+          <div class="guide-wrap">
+            <button type="button" id="guide-btn" class="pause-btn guide-btn" aria-expanded="false" aria-controls="guide-panel">
+              Guide
+            </button>
+            <div id="guide-panel" class="guide-panel hidden" role="menu" aria-label="Guide">
+              <a id="wiki-btn" class="btn ghost" href="wiki/" target="_blank" rel="noopener noreferrer" role="menuitem">Wiki</a>
+              <button type="button" id="reset-btn" class="btn danger" role="menuitem">Hard reset</button>
+            </div>
+          </div>
           <div class="meter" title="Coins">
             <span class="label">Coins</span>
             <strong id="stat-coins">0</strong>
           </div>
-          <div class="meter" title="Cube Shards">
+          <div class="meter is-idle" id="meter-shards" title="Cube Shards">
             <span class="label">Shards</span>
             <strong id="stat-shards">0</strong>
           </div>
-          <div class="meter" title="Prestige level">
+          <div class="meter is-idle" id="meter-prestige" title="Prestige level">
             <span class="label">Prestige</span>
             <strong id="stat-prestige">0</strong>
           </div>
@@ -54,7 +58,6 @@
       </header>
 
       <div class="bag-bar" aria-label="Bags">
-        <span class="bag-bar-label">Bags</span>
         <ul id="bags" class="bag-chips"></ul>
       </div>
 
@@ -122,17 +125,19 @@
               <button type="button" class="help-btn" id="help-prestige" aria-label="Prestige help">?</button>
             </h2>
             <div class="panel-body">
-              <p id="prestige-blurb" class="muted prestige-status"></p>
-              <button type="button" id="prestige-btn" class="btn danger">Prestige</button>
-              <h3 class="panel-subtitle">◆ Shard upgrades</h3>
-              <p class="muted shop-lead">Permanent — survive prestige.</p>
-              <div id="shard-upgrades" class="shop-list"></div>
-              <h3 class="panel-subtitle">Milestones</h3>
-              <div id="achievements" class="achievements-list" aria-label="Milestones"></div>
-              <div class="panel-section help-actions">
-                <a id="wiki-btn" class="btn ghost" href="wiki/" target="_blank" rel="noopener noreferrer">Wiki</a>
-                <button type="button" id="intro-btn" class="btn ghost">How to play</button>
-                <button type="button" id="reset-btn" class="btn ghost">Hard reset</button>
+              <div class="echo-block">
+                <p id="echo-meters" class="echo-meters">Shards 0 · Prestige 0</p>
+                <p id="prestige-blurb" class="muted prestige-status"></p>
+                <button type="button" id="prestige-btn" class="btn danger">Prestige</button>
+              </div>
+              <div class="echo-block">
+                <h3 class="panel-subtitle">◆ Shard upgrades</h3>
+                <p class="muted shop-lead">Permanent — survive prestige.</p>
+                <div id="shard-upgrades" class="shop-list"></div>
+              </div>
+              <div class="echo-block">
+                <h3 class="panel-subtitle">Milestones</h3>
+                <div id="achievements" class="achievements-list" aria-label="Milestones"></div>
               </div>
             </div>
           </section>
@@ -161,13 +166,13 @@
         <button type="button" class="hot-slot" data-dock="upgrades">
           <span class="slot-key">4</span>
           <span class="slot-name">Shop</span>
-          <span class="slot-role">coins</span>
+          <span class="slot-role">upgrades</span>
           <span class="menu-badge" aria-hidden="true"></span>
         </button>
         <button type="button" class="hot-slot" data-dock="prestige">
           <span class="slot-key">5</span>
           <span class="slot-name">Echo</span>
-          <span class="slot-role">◆ · reset</span>
+          <span class="slot-role">prestige</span>
           <span class="menu-badge" aria-hidden="true"></span>
         </button>
       </nav>
@@ -180,31 +185,6 @@
         <h2>The Center</h2>
         <p id="ending-text"></p>
         <button type="button" id="ending-close" class="btn">Continue digging</button>
-      </div>
-    </div>
-
-    <div
-      id="intro"
-      class="ending intro hidden"
-      aria-hidden="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="intro-title"
-    >
-      <div class="ending-card intro-card">
-        <h2 id="intro-title">The Cube Dig</h2>
-        <div class="intro-body">
-          <p>
-            A cube is buried under the village. Dig to it. Crack it.
-          </p>
-          <p>
-            You start with no coins. Chop wood, sell it at the market, hire diggers, and push a shaft
-            toward the core. Storms flood open digs — pumps help. Prestige deep enough and ◆ shards
-            stay forever.
-          </p>
-          <p class="intro-tease">What sits inside the cube is yours to find.</p>
-        </div>
-        <button type="button" id="intro-begin" class="btn">Begin</button>
       </div>
     </div>
 

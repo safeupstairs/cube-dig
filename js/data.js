@@ -19,8 +19,8 @@ export const TILES = {
   empty: { name: 'Shaft', color: '#1a2228', diggable: false, hardness: 0 },
   sky: { name: 'Sky', color: '#6a9ec8', diggable: false, hardness: 0 },
   // Coins come from Market sales only — digs drop resources / ◆, never coins.
-  grass: { name: 'Grass', color: '#4a8a42', edge: '#2e6230', hi: '#6aaa58', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
-  dirt: { name: 'Dirt', color: '#6b4a32', edge: '#4a3018', hi: '#8a6240', diggable: true, hardness: 3, drops: { dirt: 1 }, coins: 0 },
+  grass: { name: 'Grass', color: '#4a8a42', edge: '#2e6230', hi: '#6aaa58', diggable: true, hardness: 3, coins: 0 },
+  dirt: { name: 'Dirt', color: '#6b4a32', edge: '#4a3018', hi: '#8a6240', diggable: true, hardness: 3, coins: 0 },
   stone: { name: 'Stone', color: '#6a7078', edge: '#484e56', hi: '#8a9098', diggable: true, hardness: 11, drops: { stone: 1 }, coins: 0 },
   coal: { name: 'Coal', color: '#2a2e34', edge: '#14181c', hi: '#4a4e54', diggable: true, hardness: 15, drops: { coal: 1 }, coins: 0 },
   iron: { name: 'Iron ore', color: '#8a6a5a', edge: '#5a3a2a', hi: '#b09080', diggable: true, hardness: 20, drops: { iron: 1 }, coins: 0 },
@@ -126,7 +126,6 @@ export const BIOME = {
 
 export const RESOURCE_META = {
   wood: { name: 'Wood', sell: 2 },
-  dirt: { name: 'Dirt', sell: 0 },
   stone: { name: 'Stone', sell: 1 },
   coal: { name: 'Coal', sell: 3 },
   copper: { name: 'Copper ore', sell: 3 },
@@ -144,7 +143,7 @@ export const RESOURCE_META = {
 
 /** HUD / market ordering — keep bags readable as the catalog grows. */
 export const RESOURCE_GROUPS = [
-  { id: 'basic', label: 'Basics', keys: ['wood', 'stone', 'dirt'] },
+  { id: 'basic', label: 'Basics', keys: ['wood', 'stone'] },
   { id: 'ore', label: 'Ores', keys: ['coal', 'copper', 'iron', 'gold', 'crystal'] },
   { id: 'cube', label: 'Cube', keys: ['fragment'] },
   {
@@ -1106,6 +1105,7 @@ export const WIKI_SECTIONS = [
     title: 'How to dig',
     paragraphs: [
       'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
+      'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. The status line stays on the next step while you hover. A sale, a storm, or a seal the pick cannot scratch borrows that line, then the step returns.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Hard reset clears everything including tips.',
       'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
@@ -1116,12 +1116,12 @@ export const WIKI_SECTIONS = [
     id: 'resources',
     title: 'Resources',
     paragraphs: [
-      'Bags hold everything you dig or craft. Once a resource has been in the bag this dig, its chip stays at 0 instead of disappearing. Dirt does not sell. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
+      'Bags hold everything you dig or craft. Once a resource has been in the bag this dig, its chip stays at 0 instead of disappearing. Grass and dirt clear with no drop. Stone and wood fund early buildings. Coal fuels smelters and refineries.',
       'Ores: coal, copper, iron (starter pick), then gold and crystal (need Iron-bound pick).',
       'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Ward posts. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
-      'Menus: Build (Surface / Shaft / Survive), Market (by resource group), Crew, Shop (coin upgrades), Echo (prestige + ◆).',
+      'Menus: Build (Surface / Shaft / Survive), Market (sell), Crew, Shop (run upgrades), Echo (prestige + ◆). Guide, beside Pause, opens the wiki and hard reset. Shards and Prestige join the top row once they are not zero; until then Echo lists them.',
     ],
   },
   {

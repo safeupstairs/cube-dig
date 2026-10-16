@@ -2,6 +2,7 @@
  * Shared pixel sprites for buildings / trees.
  * Used by the in-game renderer and the standalone wiki icons.
  */
+import { TILES } from './data.js';
 
 /**
  * @param {CanvasRenderingContext2D} ctx
@@ -256,4 +257,94 @@ export function drawBuildingSprite(ctx, px, py, tw, b) {
     ctx.strokeStyle = '#1a1410';
     ctx.strokeRect(px + 0.5, py + 0.5, tw - 1, tw - 1);
   }
+}
+
+/** Bag-item colors for the HUD chips. Tiles reuse their dig palette. */
+const ITEM_SWATCH = {
+  wood: { color: '#5a3a22', edge: '#3a2414', hi: '#8a6240' },
+  dirt: TILES.dirt,
+  stone: TILES.stone,
+  coal: TILES.coal,
+  copper: TILES.copper,
+  iron: TILES.iron,
+  gold: TILES.gold,
+  crystal: TILES.crystal,
+  fragment: TILES.shell,
+  copperBar: { color: '#c08050', edge: '#6a3a18', hi: '#e8b888' },
+  ironBar: { color: '#9a8a7a', edge: '#4a3a2a', hi: '#d0c0b0' },
+  goldBar: { color: '#e8d48a', edge: '#8a6830', hi: '#fff0c0' },
+  steelBar: { color: '#7a8898', edge: '#3a4450', hi: '#b0c0d0' },
+  crystalLens: { color: '#8ab0d0', edge: '#3a5c7e', hi: '#d0e8f8' },
+  copperWire: { color: '#d09050', edge: '#6a3a18', hi: '#f0c080' },
+};
+
+function itemSwatchKind(id) {
+  if (id === 'copperWire') return 'wire';
+  if (id === 'crystalLens') return 'lens';
+  if (String(id).endsWith('Bar')) return 'bar';
+  return 'tile';
+}
+
+function drawItemSwatch(ctx, def, kind) {
+  const n = 16;
+  const base = def?.color || '#666';
+  const edge = def?.edge || base;
+  const hi = def?.hi || base;
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, n, n);
+  ctx.fillStyle = hi;
+  ctx.fillRect(0, 0, n, 2);
+  ctx.fillRect(0, 0, 2, n);
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, n - 3, n, 3);
+  ctx.fillRect(n - 3, 0, 3, n);
+  if (kind === 'bar') {
+    ctx.fillStyle = hi;
+    ctx.fillRect(3, 5, 10, 6);
+    ctx.fillStyle = edge;
+    ctx.fillRect(3, 10, 10, 1);
+  } else if (kind === 'wire') {
+    ctx.strokeStyle = hi;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(2, 8);
+    ctx.quadraticCurveTo(8, 2, 14, 8);
+    ctx.quadraticCurveTo(8, 14, 2, 8);
+    ctx.stroke();
+  } else if (kind === 'lens') {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(8, 8, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = edge;
+    ctx.stroke();
+  }
+}
+
+const hudIconCache = new Map();
+
+/** 16px data URL for a bag item or a building. Cached. */
+export function hudIconUrl(kind, id) {
+  const key = `${kind}:${id}`;
+  if (hudIconCache.has(key)) return hudIconCache.get(key);
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  if (kind === 'building') {
+    drawBuildingSprite(ctx, 0, 0, 16, {
+      id,
+      mineIdle: false,
+      smeltIdle: false,
+      pumpWorking: true,
+      t: 0.52,
+      outline: false,
+    });
+  } else {
+    drawItemSwatch(ctx, ITEM_SWATCH[id] || { color: '#888', edge: '#444', hi: '#bbb' }, itemSwatchKind(id));
+  }
+  const url = canvas.toDataURL('image/png');
+  hudIconCache.set(key, url);
+  return url;
 }

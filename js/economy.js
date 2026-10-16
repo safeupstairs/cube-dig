@@ -15,7 +15,6 @@ import {
 export function blankBags() {
   return {
     wood: 0,
-    dirt: 0,
     stone: 0,
     coal: 0,
     copper: 0,

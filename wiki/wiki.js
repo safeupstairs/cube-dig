@@ -411,6 +411,30 @@ function pageHome() {
       Dig, sell, hire, refine, and crack the buried cube. This field guide lists every tile, bag item,
       building, and loop — with icons from the same pixel sprites as the dig.
     </p>
+    <section class="wiki-section" id="tutorial">
+      <h2>Tutorial</h2>
+      <p>You start with no coins. Do these three things first:</p>
+      <ol>
+        <li>Click a ${tileLink('tree')} on the surface to chop it. The wood goes in your bag.</li>
+        <li>Open ${link('#/mechanic/market', 'Market')} (key 2) and sell the ${itemLink('wood')}. Selling is how you get coins.</li>
+        <li>Open ${link('#/mechanic/crew', 'Crew')} (key 3) and hire a digger. They stand idle until you pick a dig target — Trees, Anything, and so on.</li>
+      </ol>
+      <p>
+        Dig by clicking an exposed face: a tile touching open shaft or sky.
+        The cursor tip names the tile, its hit points, whether you can dig it, and what it drops.
+        The status line under the bags is the next step, not the tile name.
+        More on ${link('#/mechanic/digging', 'digging')}.
+      </p>
+      <p>
+        Menus: 1 Build (place), 2 Market (sell), 3 Crew (hire and orders), 4 Shop (run upgrades), 5 Echo (prestige and ◆).
+        Pause freezes the dig. Guide, beside Pause, opens this wiki and hard reset.
+      </p>
+      <p>Grass and dirt clear with no bag drop. Wood and stone are the early materials.</p>
+      <p>
+        Later, smelt ore at a ${buildingLink('smelter')}. Iron-bound pick level 6 scratches a seal; Steel tools only speed the hits.
+        ${link('#/mechanic/prestige', 'Prestige')} is in Echo at ${Math.round(PRESTIGE_DEPTH_RATIO * 100)}% depth with a ${PRESTIGE_MIN_COLUMNS}-wide shaft.
+      </p>
+    </section>
     <div class="wiki-toc">
       <strong>Contents</strong>
       <ol>
@@ -486,6 +510,7 @@ function pageTile(id) {
         ${id === 'core' ? '<li>Core usually needs prestige ×5 and pick/seal investment.</li>' : ''}
         ${id === 'seal' ? '<li>Seals drop ◆. Prestige ×1 unlocks the attempt and trims hit points on a new dig. Scratching one needs Iron-bound pick level 6 with no shards — Seal splitter or Inheritance can lower that. Steel tools and Heavier pick only speed the hits.</li>' : ''}
         ${id === 'tree' ? `<li>Chop for wood; ${buildingLink('grove')} replants on the sky pad.</li>` : ''}
+        ${id === 'dirt' || id === 'grass' ? '<li>Clears the tile. No bag drop.</li>' : ''}
       </ul>
     </section>
     <section class="wiki-section">
@@ -747,6 +772,7 @@ function mechanicBody(id) {
       return `
         <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, and shell need Iron-bound pick before they can be scratched. A seal needs Iron-bound pick level 6 (Seal splitter or Inheritance can lower that). Steel tools only speed the hits. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
+          <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). The status line is the next step and does not follow the pointer.</li>
           <li>Drag diggers on the map; after rest they return to their last dig stand.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
           <li>Filters & headings live in Crew → Orders.</li>

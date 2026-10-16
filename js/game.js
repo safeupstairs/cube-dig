@@ -75,6 +75,7 @@ import {
 } from './economy.js';
 import { createFx } from './fx.js';
 import { createRenderer } from './render.js';
+import { hudIconUrl } from './sprites.js';
 import { clearSave, loadSave, writeSave } from './save.js';
 import {
   deepestClearedTowardCore,
@@ -124,7 +125,11 @@ const els = {
   status: document.getElementById('status'),
   pauseBtn: document.getElementById('pause-btn'),
   resetBtn: document.getElementById('reset-btn'),
-  introBtn: document.getElementById('intro-btn'),
+  guideBtn: document.getElementById('guide-btn'),
+  guidePanel: document.getElementById('guide-panel'),
+  echoMeters: document.getElementById('echo-meters'),
+  meterShards: document.getElementById('meter-shards'),
+  meterPrestige: document.getElementById('meter-prestige'),
   hotbar: document.getElementById('hotbar'),
   buildingOrders: document.getElementById('building-orders'),
   buildPlace: document.getElementById('build-place'),
@@ -135,8 +140,6 @@ const els = {
   ending: document.getElementById('ending'),
   endingText: document.getElementById('ending-text'),
   endingClose: document.getElementById('ending-close'),
-  intro: document.getElementById('intro'),
-  introBegin: document.getElementById('intro-begin'),
   tutorial: document.getElementById('tutorial'),
   tutorialTitle: document.getElementById('tutorial-title'),
   tutorialBody: document.getElementById('tutorial-body'),
@@ -393,51 +396,72 @@ function syncHardCappedTool() {
   return false;
 }
 
+/** A sale, storm, or blocked seal borrows the status line, then the objective returns. */
+const STATUS_BEAT_MS = 5600;
+let statusBeat = null;
+
+function currentObjective() {
+  if (!state) return 'Chop a tree, then sell the wood in Market (2).';
+  const workers = state.workers || [];
+  if (!workers.length) {
+    if ((state.coins || 0) >= nextWorkerCost(state)) return 'Hire a digger in Crew (3).';
+    return 'Chop a tree, then sell the wood in Market (2).';
+  }
+  if (workers.some((w) => workerIsIdle(w))) return 'Set a dig target — they start idle.';
+  if (canPrestigeWorld(state.world)) return 'Prestige is ready in Echo (5).';
+  const seen = state.seenTypes || {};
+  const has = (id) => state.buildings.some((b) => b.id === id);
+  if (!has('grove') && (state.bags.stone || 0) >= 2) {
+    return 'Place a Grove house on the surface (Build 1).';
+  }
+  if (
+    !has('smelter') &&
+    (seen.coal || seen.copper || seen.iron || seen.gold || seen.crystal)
+  ) {
+    return 'Place a Smelter on the surface (Build 1).';
+  }
+  return 'Dig the shaft deeper.';
+}
+
+function paintStatusBar() {
+  if (!els.status) return;
+  if (statusBeat && performance.now() < statusBeat.until) {
+    if (statusBeat.html != null) {
+      if (els.status.innerHTML !== statusBeat.html) els.status.innerHTML = statusBeat.html;
+    } else if (els.status.textContent !== statusBeat.text) {
+      els.status.textContent = statusBeat.text;
+    }
+    return;
+  }
+  statusBeat = null;
+  const next = currentObjective();
+  if (els.status.textContent !== next) els.status.textContent = next;
+}
+
+function setGuideOpen(open) {
+  const panel = els.guidePanel;
+  const btn = els.guideBtn;
+  if (!panel || !btn) return;
+  panel.classList.toggle('hidden', !open);
+  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
 function setStatus(msg) {
-  els.status.textContent = msg;
+  const text = msg || '';
+  if (!text || /— \d+ left$/.test(text)) {
+    if (!text) statusBeat = null;
+    paintStatusBar();
+    return;
+  }
+  statusBeat = { html: null, text, until: performance.now() + STATUS_BEAT_MS };
+  paintStatusBar();
 }
 
 /** Status line with trusted HTML (e.g. colored building costs). */
 function setStatusHtml(html) {
-  els.status.innerHTML = html;
-}
-
-/** Set inspect plaque text; enable marquee only when content overflows a real plaque. */
-function setInspectText(msg) {
-  const outer = els.inspect;
-  const inner = els.inspectText || outer;
-  if (!outer) return;
-  const text = msg || '';
-  if (inner.textContent !== text) {
-    inner.textContent = text;
-    // Restart CSS animation on change
-    outer.classList.remove('is-marquee');
-    void outer.offsetWidth;
-  }
-  requestAnimationFrame(syncInspectMarquee);
-}
-
-/** Scroll the hover line only when it overflows a plaque at least ~12rem wide. */
-function syncInspectMarquee() {
-  const outer = els.inspect;
-  const inner = els.inspectText || outer;
-  if (!outer || !inner) return;
-  const cs = getComputedStyle(outer);
-  const pad =
-    (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-  const avail = Math.max(0, outer.clientWidth - pad);
-  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const minPlaque = rootPx * 12;
-  // offsetWidth includes the border; min-width is the border box, not the content box.
-  const collapsed = outer.offsetWidth + 1 < minPlaque;
-  const fits = collapsed || inner.scrollWidth <= avail + 1;
-  if (fits) {
-    outer.classList.remove('is-marquee');
-    outer.style.removeProperty('--inspect-slide');
-  } else {
-    outer.style.setProperty('--inspect-slide', `${avail}px`);
-    outer.classList.add('is-marquee');
-  }
+  statusBeat = { html: html || '', text: '', until: performance.now() + STATUS_BEAT_MS };
+  paintStatusBar();
 }
 
 /** Hardness used by seal/core dig gate (seal splitter softens a bit). */
@@ -576,18 +600,6 @@ function cubeTipLines(tileId) {
   return null;
 }
 
-/** Short plaque status: Ready / Too hard / Not exposed / Locked. */
-function digInspectStatusShort(tileId, x, y) {
-  if (!isExposed(state.world, x, y)) return 'Not exposed';
-  if (cubeLayerGateReason(tileId)) return 'Locked';
-  if (!canDigHardness(tileId)) {
-    const plan = scratchPlan(tileId);
-    if (plan.opensWithPick) return `Need Iron-bound ${plan.target}`;
-    return 'Need Seal splitter';
-  }
-  return 'Ready';
-}
-
 /** Longer status lines for the hover toolbox. */
 function digTipStatusLines(tileId, x, y) {
   const lines = [];
@@ -721,96 +733,9 @@ function tipContentAt(x, y) {
 }
 
 function updateInspect() {
-  if (!els.inspect) return;
   if (!hover) {
-    setInspectText('Hover a tile…');
     if (tipSource === 'world') hideTip('world');
     return;
-  }
-  const { x, y } = hover;
-  const bld = buildingAtTile(x, y);
-  if (bld) {
-    const name = bld.def?.name || buildingDef(bld.id)?.name || bld.id;
-    let status = 'Built';
-    if (bld.id === 'mine') {
-      status = bld.mineIdle || !bld.mineTargetName ? 'Idle' : 'Boring';
-    } else if (bld.id === 'grove') status = 'Planting';
-    else if (bld.id === 'smelter') {
-      const mode = recipeModeLabel(bld, SMELT_RECIPES);
-      const pct =
-        bld.smeltIdle === false
-          ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
-          : '';
-      status =
-        mode === 'Off'
-          ? 'Off — not using coal'
-          : bld.smeltIdle === false
-            ? `Smelting ${RESOURCE_META[bld.smeltProduct]?.name || 'bars'}${pct} (${mode})`
-            : `Idle — ${mode} · need ore + coal`;
-    } else if (bld.id === 'refinery') {
-      const mode = recipeModeLabel(bld, REFINE_RECIPES);
-      const pct =
-        bld.smeltIdle === false
-          ? ` ${Math.floor((bld.smeltProgress || 0) * 100)}%`
-          : '';
-      status =
-        mode === 'Off'
-          ? 'Off — not using coal'
-          : bld.smeltIdle === false
-            ? `Refining ${RESOURCE_META[bld.smeltProduct]?.name || 'goods'}${pct} (${mode})`
-            : `Idle — ${mode} · need inputs`;
-    } else if (bld.id === 'market') status = 'Open for trade';
-    else if (bld.id === 'cottage') status = 'Rest';
-    else if (bld.id === 'stall') status = 'Village';
-    else if (bld.id === 'chapel') status = 'Heals';
-    else if (bld.id === 'pump') status = bld.pumpWorking ? 'Draining' : 'Idle';
-    else if (bld.id === 'ward') status = 'Warding';
-    setInspectText(`${name} · (${x},${y}) · ${status}`);
-    refreshWorldTip();
-    return;
-  }
-  const horror = (state.monsters || []).find(
-    (m) => Math.floor(m.x) === x && Math.floor(m.y) === y
-  );
-  if (horror) {
-    setInspectText(`Deep horror · (${x},${y}) · Hostile`);
-    refreshWorldTip();
-    return;
-  }
-  const tomb = (state.tombstones || []).find((t) => t.x === x && t.y === y);
-  if (tomb) {
-    setInspectText(`Tombstone · (${x},${y})`);
-    refreshWorldTip();
-    return;
-  }
-  if (!isRevealed(state.world, x, y)) {
-    setInspectText(`Fog · (${x},${y})`);
-    refreshWorldTip();
-    return;
-  }
-  const t = tileAt(state.world, x, y);
-  if (!t) {
-    setInspectText('Out of bounds');
-    if (tipSource === 'world') hideTip('world');
-    return;
-  }
-  const def = TILES[t.id];
-  const name = def?.name || t.id;
-  if (def?.diggable) {
-    setInspectText(`${name} · (${x},${y}) · ${digInspectStatusShort(t.id, x, y)}`);
-  } else if (t.id === 'empty') {
-    setInspectText(
-      isTileFlooded(x, y)
-        ? `${name} · (${x},${y}) · Flooded`
-        : `${name} · (${x},${y})`
-    );
-  } else if (t.id === 'sky') {
-    const phase = state.weather?.phase || 'clear';
-    const skyBit =
-      phase === 'rain' ? ' · Rain' : phase === 'warn' ? ' · Storm…' : '';
-    setInspectText(`${name} · (${x},${y})${skyBit}`);
-  } else {
-    setInspectText(`${name} · (${x},${y})`);
   }
   refreshWorldTip();
 }
@@ -873,13 +798,9 @@ function createRunState(
   return run;
 }
 
-/** Pending tip ids while another modal is up (intro / tutorial). */
+/** Pending tip ids while another tip is open. */
 let tutorialQueue = [];
 let tutorialOpen = false;
-
-function isIntroVisible() {
-  return !!(els.intro && !els.intro.classList.contains('hidden'));
-}
 
 function isTutorialVisible() {
   return !!(els.tutorial && !els.tutorial.classList.contains('hidden'));
@@ -892,8 +813,8 @@ function showTutorial(id) {
   if (state.tutorials[id]) return false;
   if (!tutorialById(id)) return false;
   if (tutorialQueue.includes(id)) return true;
-  // Don't fight intro / an open tip — queue and show after dismiss
-  if (tutorialOpen || isIntroVisible() || isTutorialVisible()) {
+  // Don't fight an open tip — queue and show after dismiss
+  if (tutorialOpen || isTutorialVisible()) {
     tutorialQueue.push(id);
     return true;
   }
@@ -927,7 +848,7 @@ function dismissTutorial() {
 
 /** Show next queued tip if nothing is blocking. */
 function flushTutorialQueue() {
-  if (tutorialOpen || isIntroVisible() || isTutorialVisible()) return;
+  if (tutorialOpen || isTutorialVisible()) return;
   while (tutorialQueue.length) {
     const next = tutorialQueue.shift();
     if (!state?.tutorials?.[next] && tutorialById(next)) {
@@ -2367,7 +2288,7 @@ function workerAtScreen(sx, sy) {
   let bestD = tw * 0.65;
   for (const w of state.workers) {
     const p = renderer.worldToScreen(w.x, w.y);
-    const d = Math.hypot(p.x + tw * 0.5 - sx, p.y + tw * 0.5 - sy);
+    const d = Math.hypot(p.x - sx, p.y - sy);
     if (d < bestD) {
       bestD = d;
       best = w;
@@ -3534,7 +3455,13 @@ function renderBagBar() {
       a.textContent = meta.name;
       const b = document.createElement('strong');
       b.textContent = String(n);
-      chip.append(a, b);
+      const icon = document.createElement('img');
+      icon.className = 'hud-icon';
+      icon.alt = '';
+      icon.width = 16;
+      icon.height = 16;
+      icon.src = hudIconUrl('item', k);
+      chip.append(icon, a, b);
       chips.push(chip);
     }
     if (!chips.length) continue;
@@ -3575,7 +3502,8 @@ function makeBuildPlaceButton(b) {
     : canBuild
       ? costHtml || b.role || ''
       : costHtml;
-  btn.innerHTML = `<span class="slot-main"><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
+  const iconSrc = hudIconUrl('building', b.id);
+  btn.innerHTML = `<span class="slot-main"><img class="hud-icon" alt="" width="16" height="16" src="${iconSrc}" /><span class="slot-name">${b.name}${owned}</span></span><span class="slot-role">${roleLine}</span>`;
   bindTip(btn, b.name, b.blurb, () => {
     const tipCost = formatCostHtml(nextBuildingCost(b.id));
     const ok = cheatCanAfford(nextBuildingCost(b.id));
@@ -3847,6 +3775,11 @@ function renderUi() {
   els.coins.textContent = String(Math.floor(state.coins));
   els.shards.textContent = String(state.shards);
   els.prestige.textContent = String(state.prestige);
+  if (els.meterShards) els.meterShards.classList.toggle('is-idle', !(state.shards > 0 || state.prestige > 0));
+  if (els.meterPrestige) els.meterPrestige.classList.toggle('is-idle', !(state.prestige > 0));
+  if (els.echoMeters) {
+    els.echoMeters.textContent = `Shards ${state.shards} · Prestige ${state.prestige}`;
+  }
   const depth = deepestClearedTowardCore(state.world);
   els.depthFill.style.width = `${Math.floor(depth * 100)}%`;
   els.depth.textContent = `${Math.floor(depth * 100)}%`;
@@ -5621,6 +5554,7 @@ function loop(ts) {
     const ok = isWalkable(state.world, hover.x, hover.y);
     workerDrop = { uid: workerDrag.uid, x: hover.x, y: hover.y, ok, moved: workerDrag.moved };
   }
+  paintStatusBar();
   renderer.draw(state, hover, fx, {
     selectedWorkerId,
     buildingRadii: buildingRadiusMarkers(),
@@ -5844,63 +5778,10 @@ function bindCheats() {
   }
 }
 
-const INTRO_SEEN_KEY = 'cube-dig-intro-seen';
-
-function isIntroSeen() {
-  try {
-    return localStorage.getItem(INTRO_SEEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function markIntroSeen() {
-  try {
-    localStorage.setItem(INTRO_SEEN_KEY, '1');
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-function clearIntroSeen() {
-  try {
-    localStorage.removeItem(INTRO_SEEN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-function showIntro() {
-  if (!els.intro) return;
-  els.intro.classList.remove('hidden');
-  els.intro.setAttribute('aria-hidden', 'false');
-  els.introBegin?.focus();
-}
-
-function hideIntro(markSeen = true) {
-  if (!els.intro) return;
-  els.intro.classList.add('hidden');
-  els.intro.setAttribute('aria-hidden', 'true');
-  if (markSeen) markIntroSeen();
-  // Defer so intro is fully gone; open first tip directly (don't rely on queue)
-  requestAnimationFrame(() => {
-    tutorialQueue = tutorialQueue.filter((id) => id !== 'start_chop');
-    if (state && !(state.tutorials && state.tutorials.start_chop)) {
-      openTutorialPopup('start_chop');
-    }
-    flushTutorialQueue();
-  });
-}
-
-/** Status line always; story intro first, then start_chop tip if still needed. */
+/** Status line always; one-shot chop tip if it has not been dismissed. */
 function openOpeningGuidance() {
-  setStatus(
-    'Chop, sell, dig, build. Diggers wear out; chapels heal, pumps fight floods. Prestige deep for ◆ (Echo menu).'
-  );
-  if (!isIntroSeen()) {
-    showIntro();
-    return;
-  }
+  statusBeat = null;
+  paintStatusBar();
   showTutorial('start_chop');
 }
 
@@ -5919,7 +5800,6 @@ function boot() {
   window.addEventListener('resize', () => {
     renderer.resize();
     refreshHoverAfterCamera();
-    syncInspectMarquee();
   });
   // passive:false so touch preventDefault can stop Chromium scroll/zoom steal
   els.canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
@@ -6002,8 +5882,7 @@ function boot() {
   els.resetBtn.addEventListener('click', () => {
     if (confirm('Hard reset ALL progress including shards?')) {
       clearSave();
-      // Fresh tutorials + story intro — both return only after hard reset
-      clearIntroSeen();
+      // Fresh tutorials return only after hard reset
       tutorialQueue = [];
       tutorialOpen = false;
       if (els.tutorial) {
@@ -6019,18 +5898,6 @@ function boot() {
       save();
     }
   });
-  if (els.introBtn) {
-    els.introBtn.addEventListener('click', () => {
-      unlockAudio();
-      showIntro();
-    });
-  }
-  if (els.introBegin) {
-    els.introBegin.addEventListener('click', () => {
-      unlockAudio();
-      hideIntro(true);
-    });
-  }
   if (els.tutorialOk) {
     els.tutorialOk.addEventListener('click', () => {
       unlockAudio();
@@ -6047,18 +5914,34 @@ function boot() {
       togglePause();
     });
   }
+  if (els.guideBtn && els.guidePanel) {
+    els.guideBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unlockAudio();
+      setGuideOpen(els.guidePanel.classList.contains('hidden'));
+    });
+    els.guidePanel.addEventListener('click', (e) => {
+      if (e.target.closest('a, button')) setGuideOpen(false);
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (els.guidePanel.classList.contains('hidden')) return;
+      const wrap = els.guideBtn.closest('.guide-wrap');
+      if (wrap && wrap.contains(e.target)) return;
+      setGuideOpen(false);
+    });
+  }
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (els.guidePanel && !els.guidePanel.classList.contains('hidden')) {
+        setGuideOpen(false);
+        return;
+      }
       if (els.cheatPanel && !els.cheatPanel.classList.contains('hidden')) {
         setCheatPanelOpen(false);
         return;
       }
       if (isTutorialVisible()) {
         dismissTutorial();
-        return;
-      }
-      if (els.intro && !els.intro.classList.contains('hidden')) {
-        hideIntro(true);
         return;
       }
       tool = null;
