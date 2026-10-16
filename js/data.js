@@ -300,7 +300,7 @@ export const BUILDINGS = {
     role: 'Housing',
     cost: { coins: 30, wood: 10, stone: 5 },
     blurb:
-      '+2 digger seats. Assign crew to rest here — build deep so they sleep at the dig face. Rest restores energy, not vitality. Each extra shack costs more.',
+      'One shaft tile. +2 digger seats. Assign crew to rest here — build deep so they sleep at the dig face. A tree on the tile is removed and its wood goes to the bag. Rest restores energy, not vitality. Each extra shack costs more.',
     color: '#8a6040',
   },
   mine: {
@@ -336,8 +336,9 @@ export const BUILDINGS = {
     role: 'Planting',
     cost: { coins: 22, wood: 8, stone: 2 },
     blurb:
-      'Must sit on top of the world (above surface blocks). Slowly plants saplings ±4 tiles on the sky pad (same row as this house). Does not chop — dig trees yourself or assign diggers to Trees. Each extra grove costs more.',
+      'Two columns wide. Must sit on top of the world (above surface blocks). A tree in the way is removed and its wood goes to the bag. Slowly plants saplings ±4 tiles on the sky pad (same row as this house). Does not chop — dig trees yourself or assign diggers to Trees. Each extra grove costs more.',
     color: '#4a8a4a',
+    spanW: 2,
   },
   market: {
     id: 'market',
@@ -361,8 +362,9 @@ export const BUILDINGS = {
     starter: true,
     decorative: true,
     blurb:
-      'A cozy hut by the village market. Diggers can rest here like at a shack. No hire seats.',
+      'A two-column hut by the village market. Diggers can rest here like at a shack. No hire seats.',
     color: '#7a5840',
+    spanW: 2,
   },
   stall: {
     id: 'stall',
@@ -382,7 +384,7 @@ export const BUILDINGS = {
     role: 'Medicine',
     cost: { coins: 90, wood: 8, stone: 12 },
     blurb:
-      'Crew resting in range slowly recover vitality (the wear that kills diggers). Place near deep shacks. Does not hire seats. Each extra chapel costs more.',
+      'One shaft tile. Crew resting in range slowly recover vitality (the wear that kills diggers). Place near deep shacks. A tree on the tile is removed and its wood goes to the bag. Does not hire seats. Each extra chapel costs more.',
     color: '#7a6a58',
   },
   pump: {
@@ -414,6 +416,22 @@ export const BUILDINGS = {
     color: '#6a7a9a',
   },
 };
+
+/** Width and height in tiles. Surface houses may use spanW 2. Shaft buildings are one square. */
+export function buildingSpan(b) {
+  const def = b?.def || BUILDINGS[b?.id] || b || {};
+  return {
+    w: Math.max(1, def.spanW || 1),
+    h: Math.max(1, def.spanH || 1),
+  };
+}
+
+/** True when tile (tx, ty) sits inside the building's footprint. */
+export function buildingCoversTile(b, tx, ty) {
+  if (!b) return false;
+  const { w, h } = buildingSpan(b);
+  return tx >= b.x && tx < b.x + w && ty >= b.y && ty < b.y + h;
+}
 
 /** Coin upgrades — order matches UPGRADE_GROUPS. */
 export const UPGRADES = [
@@ -860,7 +878,7 @@ export const DIG_HEADINGS = [
     id: 'toward_core',
     label: 'Toward core',
     blurb:
-      'Bias digs toward the buried cube among revealed tiles. Needs Echo Sense (Listening Post) or a fog-revealed shell.',
+      'Bias digs toward the buried cube. Stays locked until the core tile is uncovered.',
     requireSense: true,
   },
 ];
@@ -1148,11 +1166,11 @@ export const WIKI_SECTIONS = [
     id: 'crew',
     title: 'Crew & orders',
     paragraphs: [
-      'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Home shack and combat stance too.',
+      'Hire diggers in Crew. They start Idle until you set a dig filter. Headings: Down / Widen / Toward core. Toward core stays locked until the core tile is uncovered. Home shack and combat stance too.',
       'A Seal or Core order refuses a face the pick cannot scratch. The status bar and that digger’s orders say why — usually Iron-bound pick level 6. Steel tools do not open the seal.',
       'Tree cutters, after a rest, walk to the nearest tree. Other diggers return to the face they left.',
       'Stance: Work (default), Flee (run to rest when a horror closes in), Stand ground (militia diggers chip horror HP when hit).',
-      'Rest restores energy at shacks/cottage; chapels heal vitality. Pumps keep flood pockets dry. Ward posts burn deep horrors — Bright wards boost radius and DPS.',
+      'Rest restores energy at shacks and the cottage; chapels heal vitality. Shaft buildings are one tile. The cottage and grove house each occupy two columns on the surface. Pumps keep flood pockets dry. Ward posts burn deep horrors — Bright wards boost radius and DPS.',
     ],
   },
   {

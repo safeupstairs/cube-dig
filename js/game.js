@@ -1,6 +1,8 @@
 import {
   BUILDINGS,
   BUILDING_GROUPS,
+  buildingCoversTile,
+  buildingSpan,
   BAG_PINNED,
   CHAPEL_HEAL_PER_SEC,
   CHAPEL_RADIUS,
@@ -377,7 +379,7 @@ function updateWorldCursor() {
 /**
  * Non-purchaseable tool modes must not stay selected.
  * Hire: at worker cap OR can't afford next hire → dig/chop.
- * Buildings: only starter max (placeables scale price; stay sticky when unaffordable).
+ * Buildings: only starter max (placeables scale price). A successful place returns to dig.
  * @returns {boolean} true if tool was cleared
  */
 function syncHardCappedTool() {
@@ -905,30 +907,35 @@ function fireRevealTutorials() {
   if (canPrestigeWorld(state.world)) showTutorial('prestige_tip');
 }
 
-/** Surface pad open and free of buildings (sky row above surfaceY). */
-function canPlaceSurfaceStarter(run, tx) {
+/** Surface pad open and free of buildings (sky row above surfaceY). spanW covers extra columns to the right. */
+function canPlaceSurfaceStarter(run, tx, spanW = 1) {
   if (!run) return false;
   const w = run.world;
   const sy = w.surfaceY;
   const ty = sy - 1;
-  if (tx < 0 || tx >= w.w || ty < 0) return false;
-  const pad = tileAt(w, tx, ty);
-  const ground = tileAt(w, tx, sy);
-  if (!pad || !ground) return false;
-  if (pad.id !== 'sky' && pad.id !== 'empty') return false;
-  const okGround =
-    ground.id === 'empty' ||
-    ground.id === 'grass' ||
-    ground.id === 'dirt' ||
-    ground.id === 'tree';
-  if (!okGround) return false;
-  if (run.buildings.some((b) => b.x === tx && (b.y === ty || b.y === sy))) return false;
+  for (let dx = 0; dx < spanW; dx++) {
+    const x = tx + dx;
+    if (x < 0 || x >= w.w || ty < 0) return false;
+    const pad = tileAt(w, x, ty);
+    const ground = tileAt(w, x, sy);
+    if (!pad || !ground) return false;
+    if (pad.id !== 'sky' && pad.id !== 'empty') return false;
+    const okGround =
+      ground.id === 'empty' ||
+      ground.id === 'grass' ||
+      ground.id === 'dirt' ||
+      ground.id === 'tree';
+    if (!okGround) return false;
+    if (run.buildings.some((b) => buildingCoversTile(b, x, ty) || buildingCoversTile(b, x, sy))) {
+      return false;
+    }
+  }
   return true;
 }
 
 function pushStarterBuilding(run, id, tx) {
   const def = BUILDINGS[id];
-  if (!def || !canPlaceSurfaceStarter(run, tx)) return false;
+  if (!def || !canPlaceSurfaceStarter(run, tx, def.spanW || 1)) return false;
   run.buildings.push({
     uid: allocId('b'),
     id,
@@ -1038,10 +1045,9 @@ function echoSenseCardinal() {
   return dx > 0 ? 'east of camp' : 'west of camp';
 }
 
-/** Toward-core Orders unlock: Listening Post sense or fog-revealed shell. */
+/** Toward-core Orders unlock only after the core tile itself is fog-revealed. */
 function towardCoreHeadingUnlocked() {
-  if (echoSenseTier(state) >= 1) return true;
-  return !!(state.seenTypes && state.seenTypes.shell);
+  return !!(state.seenTypes && state.seenTypes.core);
 }
 
 function ensureWorkerDigHeading(w) {
@@ -1355,7 +1361,7 @@ function hydrate(data) {
     if ((b.id === 'smelter' || b.id === 'refinery') && b.y !== padY) {
       const pad = tileAt(state.world, b.x, padY);
       const blocked = state.buildings.some(
-        (o) => o !== b && o.x === b.x && (o.y === padY || o.y === sy)
+        (o) => o !== b && (buildingCoversTile(o, b.x, padY) || buildingCoversTile(o, b.x, sy))
       );
       if (!blocked && pad && (pad.id === 'sky' || pad.id === 'empty')) {
         b.y = padY;
@@ -1785,40 +1791,47 @@ function placeBuilding(id, tx, ty) {
     return;
   }
 
-  const t = tileAt(state.world, tx, ty);
-  if (!t) {
-    setStatus('Out of bounds.');
-    sfx.deny();
-    return;
-  }
-  if (!isRevealed(state.world, tx, ty)) {
-    setStatus('Reveal that tile first.');
-    sfx.deny();
-    return;
-  }
-  // Sky only above surface — not a build site
-  if (t.id === 'sky') {
-    setStatus('Cannot build in the sky.');
-    sfx.deny();
-    return;
-  }
-  // Keep seals / core / shell intact (must dig intentionally)
-  if (t.id === 'seal' || t.id === 'core' || t.id === 'shell') {
-    setStatus('Break that block by digging first.');
-    sfx.deny();
-    return;
-  }
-  // Empty shaft OK; diggable tiles get auto-cleared into shaft
-  const diggable = !!TILES[t.id]?.diggable;
-  if (t.id !== 'empty' && !diggable) {
-    setStatus('Cannot build here.');
-    sfx.deny();
-    return;
-  }
-  if (state.buildings.some((b) => b.x === tx && b.y === ty)) {
-    setStatus('Tile occupied.');
-    sfx.deny();
-    return;
+  const spanW = def.spanW || 1;
+  const spanH = def.spanH || 1;
+  const cells = [];
+  for (let dy = 0; dy < spanH; dy++) {
+    for (let dx = 0; dx < spanW; dx++) {
+      const x = tx + dx;
+      const y = ty + dy;
+      const t = tileAt(state.world, x, y);
+      if (!t) {
+        setStatus(spanW > 1 ? 'Not enough room for that footprint.' : 'Out of bounds.');
+        sfx.deny();
+        return;
+      }
+      if (!isRevealed(state.world, x, y)) {
+        setStatus('Reveal that tile first.');
+        sfx.deny();
+        return;
+      }
+      if (t.id === 'sky') {
+        setStatus('Cannot build in the sky.');
+        sfx.deny();
+        return;
+      }
+      if (t.id === 'seal' || t.id === 'core' || t.id === 'shell') {
+        setStatus('Break that block by digging first.');
+        sfx.deny();
+        return;
+      }
+      const diggable = !!TILES[t.id]?.diggable;
+      if (t.id !== 'empty' && !diggable) {
+        setStatus('Cannot build here.');
+        sfx.deny();
+        return;
+      }
+      if (state.buildings.some((b) => buildingCoversTile(b, x, y))) {
+        setStatus('Tile occupied.');
+        sfx.deny();
+        return;
+      }
+      cells.push({ x, y, t, diggable });
+    }
   }
   const cost = nextBuildingCost(id);
   if (!cheatPay(cost)) {
@@ -1826,11 +1839,34 @@ function placeBuilding(id, tx, ty) {
     sfx.deny();
     return;
   }
-  if (diggable) {
-    setEmpty(state.world, tx, ty);
-    fx.burst(tx, ty, TILES[t.id].color, 8);
+  for (const cell of cells) {
+    if (cell.t.id === 'tree' && isHouse(id)) {
+      applyTileDrops(state, 'tree');
+      fx.chopHit(cell.x, cell.y, true);
+      sfx.chop();
+    }
+    if (!cell.diggable) continue;
+    setEmpty(state.world, cell.x, cell.y);
+    if (cell.t.id !== 'tree') fx.burst(cell.x, cell.y, TILES[cell.t.id].color, 8);
   }
   finishPlaceBuilding(id, def, tx, ty, cheats.freeBuild ? {} : cost);
+}
+
+/** Cottage, shack, grove house, and chapel. A tree on the footprint is cleared. */
+function isHouse(id) {
+  return id === 'cottage' || id === 'shack' || id === 'grove' || id === 'chapel';
+}
+
+/** Sky-pad tree → open air; soil-row tree → grass or dirt. Wood goes to the bag. */
+function removeTreeForBuilding(x, y) {
+  const t = tileAt(state.world, x, y);
+  if (!t || t.id !== 'tree') return false;
+  clearTreeToSoil(state.world, x, y);
+  applyTileDrops(state, 'tree');
+  fx.chopHit(x, y, true);
+  fx.burst(x, y, TILES.tree.color, 8);
+  sfx.chop();
+  return true;
 }
 
 /** Surface forest / trade / refining / village buildings: snap to sky pad above surfaceY. */
@@ -1868,9 +1904,10 @@ function placeSurfaceCamp(id, clickX, clickY) {
   const sy = state.world.surfaceY;
   const tx = clickX;
   const ty = sy - 1;
+  const spanW = def.spanW || 1;
 
-  if (tx < 0 || tx >= MAP_W || ty < 0) {
-    setStatus('Out of bounds.');
+  if (tx < 0 || tx + spanW > MAP_W || ty < 0) {
+    setStatus(spanW > 1 ? 'Not enough room for that footprint.' : 'Out of bounds.');
     sfx.deny();
     return;
   }
@@ -1880,41 +1917,39 @@ function placeSurfaceCamp(id, clickX, clickY) {
     setStatus(`${def.name} must sit on top of the world — placing above the surface of this column.`);
   }
 
-  const pad = tileAt(state.world, tx, ty);
-  const ground = tileAt(state.world, tx, sy);
-  if (!pad || !ground) {
-    setStatus('Out of bounds.');
-    sfx.deny();
-    return;
-  }
-  // Reveal pad / surface if needed (fog edge)
-  if (!isRevealed(state.world, tx, ty) || !isRevealed(state.world, tx, sy)) {
-    revealAround(state.world, tx, sy, 1);
-  }
-
-  // Pad must be open sky (or cleared empty) — never inside dirt
-  if (pad.id !== 'sky' && pad.id !== 'empty') {
-    setStatus(`Cannot place ${def.name} in ${TILES[pad.id]?.name || pad.id}. Need open air above the surface.`);
-    sfx.deny();
-    return;
-  }
-
-  // Column foundation: buildable soil / empty / tree — not rock/ore/seals
-  const okGround =
-    ground.id === 'empty' ||
-    ground.id === 'grass' ||
-    ground.id === 'dirt' ||
-    ground.id === 'tree';
-  if (!okGround) {
-    setStatus(`Cannot place ${def.name} on ${TILES[ground.id]?.name || ground.id}. Clear the surface first.`);
-    sfx.deny();
-    return;
-  }
-  // Occupancy: pad tile, or another building already on this column's surface
-  if (state.buildings.some((b) => b.x === tx && (b.y === ty || b.y === sy))) {
-    setStatus('Surface column already has a building.');
-    sfx.deny();
-    return;
+  for (let dx = 0; dx < spanW; dx++) {
+    const x = tx + dx;
+    const pad = tileAt(state.world, x, ty);
+    const ground = tileAt(state.world, x, sy);
+    if (!pad || !ground) {
+      setStatus('Out of bounds.');
+      sfx.deny();
+      return;
+    }
+    if (!isRevealed(state.world, x, ty) || !isRevealed(state.world, x, sy)) {
+      revealAround(state.world, x, sy, 1);
+    }
+    const treeOk = isHouse(id) && pad.id === 'tree';
+    if (pad.id !== 'sky' && pad.id !== 'empty' && !treeOk) {
+      setStatus(`Cannot place ${def.name} in ${TILES[pad.id]?.name || pad.id}. Need open air above the surface.`);
+      sfx.deny();
+      return;
+    }
+    const okGround =
+      ground.id === 'empty' ||
+      ground.id === 'grass' ||
+      ground.id === 'dirt' ||
+      ground.id === 'tree';
+    if (!okGround) {
+      setStatus(`Cannot place ${def.name} on ${TILES[ground.id]?.name || ground.id}. Clear the surface first.`);
+      sfx.deny();
+      return;
+    }
+    if (state.buildings.some((b) => buildingCoversTile(b, x, ty) || buildingCoversTile(b, x, sy))) {
+      setStatus('Surface column already has a building.');
+      sfx.deny();
+      return;
+    }
   }
   const cost = nextBuildingCost(id);
   if (!cheatPay(cost)) {
@@ -1922,7 +1957,13 @@ function placeSurfaceCamp(id, clickX, clickY) {
     sfx.deny();
     return;
   }
-  // Leave surface blocks intact — camp sits above them
+  // Leave surface soil intact. A house knocks down any tree on its footprint.
+  if (isHouse(id)) {
+    for (let dx = 0; dx < spanW; dx++) {
+      removeTreeForBuilding(tx + dx, ty);
+      removeTreeForBuilding(tx + dx, sy);
+    }
+  }
   finishPlaceBuilding(id, def, tx, ty, cheats.freeBuild ? {} : cost);
 }
 
@@ -1940,32 +1981,22 @@ function finishPlaceBuilding(id, def, tx, ty, paidCost) {
   selectedWorkerId = null;
   flashBuildingRadius(uid, 2.8);
   if (id === 'smelter' || id === 'refinery') setDockPanel('build');
-  // Sticky place while selected; starter-only caps still clear the tool
+  tool = null;
   if (id === 'listening') {
-    tool = buildingAtCap(id) ? null : tool;
     unlockAchievement('echo_sense');
     const tier = echoSenseTier(state);
     setStatus(
-      `Listening Post online — Echo Sense ${tier}: cube lies ${echoSenseCardinal()}. No fog cleared.`
+      `Listening Post online — Echo Sense ${tier}: cube lies ${echoSenseCardinal()}. No fog cleared. Dig / chop selected.`
     );
     renderUi();
     save();
     return;
   }
   if (id === 'pump') unlockAchievement('first_pump');
-  if (buildingAtCap(id)) {
-    tool = null;
-    setStatus(`Built ${def.name} — at max. Dig / chop selected.`);
-  } else {
-    const range = describeBuildingRange({ id, x: tx, y: ty });
-    const next = nextBuildingCost(id);
-    const nextBit = Object.keys(next).length
-      ? ` Next: ${formatCostHtml(next)}.`
-      : '';
-    setStatusHtml(
-      (range ? `Built ${def.name}. ${range}.` : `Built ${def.name}.`) + nextBit
-    );
-  }
+  const range = describeBuildingRange({ id, x: tx, y: ty });
+  setStatusHtml(
+    (range ? `Built ${def.name}. ${range}.` : `Built ${def.name}.`) + ' Dig / chop selected.'
+  );
   if (id === 'grove') showTutorial('hire_digger');
   if (id === 'smelter') showTutorial('smelter_ore');
   if (id === 'refinery') showTutorial('refinery_tip');
@@ -2325,13 +2356,14 @@ function clearWorkerDrag() {
 }
 
 function buildingAtTile(tx, ty) {
-  return state.buildings.find((b) => b.x === tx && b.y === ty) || null;
+  return state.buildings.find((b) => buildingCoversTile(b, tx, ty)) || null;
 }
 
 function nearBuilding(wx, wy, id, radius) {
   for (const b of state.buildings) {
     if (b.id !== id) continue;
-    const d = Math.abs(b.x + 0.5 - wx) + Math.abs(b.y + 0.5 - wy);
+    const { w, h } = buildingSpan(b);
+    const d = Math.abs(b.x + w / 2 - wx) + Math.abs(b.y + h / 2 - wy);
     if (d <= radius + 0.01) return b;
   }
   return null;
@@ -3248,7 +3280,7 @@ function tryCreepDrillDown(b) {
   const ny = b.y + 1;
   if (ny >= MAP_H) return false;
   if (ny <= state.world.surfaceY) return false;
-  if (state.buildings.some((o) => o.uid !== b.uid && o.x === nx && o.y === ny)) {
+  if (state.buildings.some((o) => o.uid !== b.uid && buildingCoversTile(o, nx, ny))) {
     return false;
   }
   const t = tileAt(state.world, nx, ny);
@@ -3414,7 +3446,7 @@ function doPrestige() {
 function centerCamera() {
   renderer.cam.x = state.world.spawnX;
   renderer.cam.y = state.world.spawnY + 4;
-  renderer.cam.zoom = 2.4;
+  renderer.cam.zoom = 3;
 }
 
 function appendShopGroup(parent, label) {
@@ -4447,7 +4479,7 @@ function renderOrdersPanel() {
       btn,
       h.label,
       locked
-        ? `${h.blurb}\nLocked — build a Listening Post (or reveal cube shell fog).`
+        ? `${h.blurb}\nLocked until you uncover the core.`
         : h.blurb
     );
     btn.addEventListener('click', () => {
@@ -4909,7 +4941,7 @@ function bindHelpTips() {
         },
         { text: senseLine },
         {
-          text: 'Toward core unlocks with Echo Sense or after fog reveals cube shell. Filters for shell / seal / core appear only after fog reveals that layer. Stand ground chips horrors when hit; Flee runs to rest.',
+          text: 'Toward core stays locked until the core tile is uncovered. Filters for shell / seal / core appear only after fog reveals that layer. Stand ground chips horrors when hit; Flee runs to rest.',
           muted: true,
         },
       ];
@@ -5561,6 +5593,8 @@ function loop(ts) {
     echoSense,
     workerDrop,
     animNow: simMs,
+    placeSpan: tool && BUILDINGS[tool] ? BUILDINGS[tool].spanW || 1 : 0,
+    placeSurface: !!(tool && isSurfaceCamp(tool)),
   });
   requestAnimationFrame(loop);
 }

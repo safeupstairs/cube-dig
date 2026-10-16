@@ -5,6 +5,7 @@ import {
   PRESTIGE_DEPTH_RATIO,
   PRESTIGE_MIN_COLUMNS,
   TILES,
+  buildingCoversTile,
 } from './data.js';
 
 const IDS = [
@@ -445,7 +446,11 @@ export function canPlantTree(world, x, y, buildings) {
   if (!ground) return false;
   if (ground.id !== 'grass' && ground.id !== 'dirt' && ground.id !== 'empty') return false;
   // Occupancy: surface camps share this sky pad (and legacy soil-row camps)
-  if ((buildings || []).some((b) => b.x === x && (b.y === y || b.y === world.surfaceY))) {
+  if (
+    (buildings || []).some(
+      (b) => buildingCoversTile(b, x, y) || buildingCoversTile(b, x, world.surfaceY)
+    )
+  ) {
     return false;
   }
   return true;
@@ -503,7 +508,9 @@ export function liftTreesToSkyPad(world, buildings = []) {
     world.tiles[groundI] = world.idIndex[soil];
     world.hp[groundI] = TILES[soil].hardness;
 
-    const occupied = buildings.some((b) => b.x === x && (b.y === padY || b.y === sy));
+    const occupied = buildings.some(
+      (b) => buildingCoversTile(b, x, padY) || buildingCoversTile(b, x, sy)
+    );
     if (occupied) continue;
     if (padKind !== 'sky' && padKind !== 'empty') continue;
 
