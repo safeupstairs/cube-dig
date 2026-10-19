@@ -15,6 +15,7 @@
           <h1>The Cube Dig</h1>
           <p class="tag">Dig deep. Keep the crew alive. Crack the cube.</p>
         </div>
+        <p id="next-goal" class="next-goal hidden"></p>
         <div class="meters">
           <button type="button" id="pause-btn" class="pause-btn" aria-pressed="false" aria-label="Pause simulation" title="Pause simulation (Space)">
             <span class="pause-glyph" aria-hidden="true"></span>
@@ -61,9 +62,7 @@
         <ul id="bags" class="bag-chips"></ul>
       </div>
 
-      <p id="status" class="status-bar status" aria-live="polite">
-        Dig exposed blocks. Tunnel down through the fog.
-      </p>
+      <p id="status" class="status-bar status" aria-live="polite"></p>
 
       <main class="stage">
         <div class="canvas-wrap">

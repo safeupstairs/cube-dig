@@ -413,21 +413,32 @@ function pageHome() {
     </p>
     <section class="wiki-section" id="tutorial">
       <h2>Tutorial</h2>
-      <p>You start with no coins. Do these three things first:</p>
+      <p>You start with no coins. On the first dig, each menu appears after the job that needs it:</p>
       <ol>
         <li>Click a ${tileLink('tree')} on the surface to chop it. The wood goes in your bag.</li>
-        <li>Open ${link('#/mechanic/market', 'Market')} (key 2) and sell the ${itemLink('wood')}. Selling is how you get coins.</li>
-        <li>Open ${link('#/mechanic/crew', 'Crew')} (key 3) and hire a digger. They stand idle until you pick a dig target — Trees, Anything, and so on.</li>
+        <li>${link('#/mechanic/market', 'Market')} (key 2) appears once wood is in the bag. Sell it.</li>
+        <li>Dig down for ${itemLink('stone')}. The stone chip appears. Build is still closed.</li>
+        <li>${link('#/buildings', 'Build')} (key 1) lists a ${buildingLink('grove')}. Place it on the surface.</li>
+        <li>${link('#/mechanic/crew', 'Crew')} (key 3) appears. Hire a digger and set them to Trees.</li>
       </ol>
+      <p>
+        After that, the rest of the first dig opens one system at a time: a Shack and the Shop once a digger is chopping trees,
+        a ${buildingLink('smelter')} when coal, copper, or iron shows,
+        a shaft pump when a storm warns or an aquifer shows,
+        a chapel if a digger is hurt, a ward when horrors appear, a drill and refinery after the first iron bar,
+        a listening post once the shaft is underway, then Echo and Widen as depth nears the prestige line.
+        The first prestige opens every menu and keeps them open. Dig filters and Toward core still wait until fog reveals those tiles.
+      </p>
       <p>
         Dig by clicking an exposed face: a tile touching open shaft or sky.
         The cursor tip names the tile, its hit points, whether you can dig it, and what it drops.
-        The status line under the bags is the next step, not the tile name.
+        The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops.
+        On a first dig the next step sits in the top left until that job is done. Hire and Trees are shown once. After that the corner stays quiet until a specific job, such as a smelter. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns, then says prestige is ready. The status line under the bags reports what just happened.
         More on ${link('#/mechanic/digging', 'digging')}.
       </p>
       <p>
-        Menus: 1 Build (place), 2 Market (sell), 3 Crew (hire and orders), 4 Shop (run upgrades), 5 Echo (prestige and ◆).
-        Pause freezes the dig. Guide, beside Pause, opens this wiki and hard reset.
+        Menus, once each has appeared: 1 Build (place), 2 Market (sell), 3 Crew (hire and orders), 4 Shop (run upgrades), 5 Echo (prestige and ◆).
+        A hidden menu’s number key does nothing. Pause freezes the dig. Guide, beside Pause, opens this wiki and hard reset.
       </p>
       <p>Grass and dirt clear with no bag drop. Wood and stone are the early materials.</p>
       <p>
@@ -449,8 +460,10 @@ function pageHome() {
     <section class="wiki-section">
       <h2>Start here</h2>
       <p>
-        Chop ${tileLink('tree')} → sell ${itemLink('wood')} at the ${buildingLink('market')} →
-        hire diggers → dig a shaft → build a ${buildingLink('smelter')} → prestige for ◆.
+        Chop ${tileLink('tree')} → sell ${itemLink('wood')} → dig ${itemLink('stone')} →
+        place a ${buildingLink('grove')} → set crew to trees → dig a shaft →
+        build a ${buildingLink('smelter')} → prestige for ◆.
+        The full dock stays open after the first prestige.
         Named layers on the HUD: ${DIG_LAYERS.map((l) => esc(l.name)).join(' → ')}.
       </p>
       <ul>
@@ -771,9 +784,10 @@ function mechanicBody(id) {
   switch (id) {
     case 'digging':
       return `
+        <p>On a first dig the dock stays closed until you chop, sell wood, dig stone, and place a grove. Crew orders start at Idle and Trees. The first prestige leaves every menu open. Fog still hides dig targets until those tiles are revealed.</p>
         <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, and shell need Iron-bound pick before they can be scratched. A seal needs Iron-bound pick level 6 (Seal splitter or Inheritance can lower that). Steel tools only speed the hits. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
-          <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). The status line is the next step and does not follow the pointer.</li>
+          <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). On a first dig the next step sits in the top left until that job is done, then the corner stays quiet until a specific job. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns. The status line reports what just happened.</li>
           <li>Drag diggers on the map. After resting at a shack, they return to their last dig stand; tree cutters walk to the nearest tree.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
           <li>Filters & headings live in Crew → Orders.</li>
@@ -789,7 +803,7 @@ function mechanicBody(id) {
         </ul>`;
     case 'market':
       return `
-        <p>The ${buildingLink('market')} starts each dig. Digging never awards coins — only selling does.</p>
+        <p>On a first dig, Market appears once wood is in the bag, and that row is the only one until stone and ores show up. The ${buildingLink('market')} starts each dig. Digging never awards coins — only selling does.</p>
         <ul>
           <li>Keep N + Auto-sell: surplus above Keep sells on blur / tick.</li>
           <li>${link('#/upgrade/sell_bonus', 'Market tip')} raises prices.</li>
@@ -797,6 +811,7 @@ function mechanicBody(id) {
         </ul>`;
     case 'crew':
       return `
+        <p>On a first dig, Crew appears after a Grove house. Orders start with Idle and Trees. Dirt, stone, and Anything appear once a digger is chopping trees. Widen appears with Echo. Flee and Stand ground appear with horrors. After the first prestige every order is listed; Toward core still waits until fog reveals the core.</p>
         <p>Hire diggers (cap from shacks + shards). New hires start <strong>Idle</strong> until you set a dig target. Out of energy, they walk to their shack (or the cottage) and refill only once they arrive. Vitality drains from digging, flood, lava, and horrors — ${buildingLink('chapel')} heals vitality while they rest in range. After that, diggers return to the face they left; tree cutters walk to the nearest tree instead.</p>
         <p>A Seal or Core order will not swing at a face the pick cannot scratch. The status bar and the selected digger’s orders name the missing Iron-bound level (6 with no shards). Steel tools do not open it.</p>
         <h3>Filters</h3>
@@ -824,7 +839,7 @@ function mechanicBody(id) {
     case 'hazards':
       return `
         <ul>
-          <li>${tileLink('aquifer')} — flood on breach.</li>
+          <li>${tileLink('aquifer')} — flood on breach. On a first dig, seeing one opens the ${buildingLink('pump')} in Build.</li>
           <li>${tileLink('lava')} — burn while adjacent.</li>
           <li>${tileLink('gas')} — explosion on crack.</li>
         </ul>

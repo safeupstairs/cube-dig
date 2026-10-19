@@ -1035,29 +1035,29 @@ export function achievementById(id) {
 
 /**
  * One-shot guidance tips. Sticky across prestige; cleared only on hard reset.
- * Early ladder: start_chop → dig_stone → hire_digger → crew_wood.
+ * Early ladder: chop → sell wood → dig stone → grove → crew on trees.
  * Situational: rain / ore / biomes / seal / prestige.
  */
 export const TUTORIAL_TIPS = [
   {
     id: 'start_chop',
     title: 'Chop wood',
-    text: 'You start with no coins. Chop trees on the sky pad, then sell wood at Market (2) for coins.',
+    text: 'Chop a tree on the sky pad. The wood goes in your bag.',
   },
   {
     id: 'dig_stone',
-    title: 'Grove next',
-    text: 'Dig down for stone, then place a Grove house on the surface (Build 1) for a steady tree supply.',
+    title: 'Dig for stone',
+    text: 'Dig down from the sky pad until you hit stone. It goes in your bag.',
   },
   {
     id: 'hire_digger',
     title: 'Hire a digger',
-    text: 'Hire a digger in Crew (3). They start idle — set a dig target (trees, ore, Anything) before they work.',
+    text: 'Hire a digger in Crew (3). They start idle — set their dig target to Trees.',
   },
   {
     id: 'crew_wood',
     title: 'Steady wood income',
-    text: 'Put this digger on trees. In Market, turn Auto on for wood — Keep defaults to 10. Surplus sells while you keep a stockpile.',
+    text: 'Set this digger to Trees so they chop while you dig the shaft.',
   },
   {
     id: 'rain_pump',
@@ -1136,8 +1136,8 @@ export const WIKI_SECTIONS = [
     id: 'overview',
     title: 'How to dig',
     paragraphs: [
-      'You start with no coins. Chop trees on the sky pad, sell wood at the village Market, then hire diggers and push a shaft toward the buried cube.',
-      'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. The status line stays on the next step while you hover. A sale, a storm, or a seal the pick cannot scratch borrows that line, then the step returns.',
+      'You start with no coins. On a first dig the menus arrive one job at a time: chop a tree, sell the wood, dig down for stone, place a Grove house, then set a digger to Trees. After the first prestige every menu stays open.',
+      'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. On a first dig the next step sits in the top left until that job is done, then the corner stays quiet until a specific job. Once depth reaches the prestige line, the top left asks you to widen the shaft to 3 columns. The status line under the bags reports a sale, a storm, or a seal the pick cannot scratch.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Buying Inheritance adds its wood and stone to this dig as well (iron bars from level 2). Hard reset clears everything including tips.',
       'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
@@ -1153,7 +1153,7 @@ export const WIKI_SECTIONS = [
       'Fragment ≠ shard. Fragments are a bag item (shell + seals) — sell or spend on Ward posts. ◆ Shards are prestige currency (seals + core + depth grants) for permanent upgrades; they survive prestige, fragments do not.',
       'Crafted goods: bars, steel, copper wire, crystal lenses. Every ore should feed a building or upgrade — not only the market.',
       'Auto-sell + Keep in Market stocks a reserve while cashing surplus.',
-      'Menus: Build (Surface / Shaft / Survive), Market (sell), Crew, Shop (run upgrades), Echo (prestige + ◆). Guide, beside Pause, opens the wiki and hard reset. Shards and Prestige join the top row once they are not zero; until then Echo lists them.',
+      'Menus on a first dig: Market once wood is in the bag, Build once stone is, Crew after a Grove house, Shop once a digger is chopping trees, Echo as the shaft nears the prestige line. After the first prestige the full dock stays: Build, Market, Crew, Shop, Echo. Guide, beside Pause, opens the wiki and hard reset. Shards and Prestige join the top row once they are not zero; until then Echo lists them.',
     ],
   },
   {

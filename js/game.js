@@ -125,6 +125,7 @@ const els = {
   prestigeBlurb: document.getElementById('prestige-blurb'),
   prestigePayout: document.getElementById('prestige-payout'),
   status: document.getElementById('status'),
+  nextGoal: document.getElementById('next-goal'),
   pauseBtn: document.getElementById('pause-btn'),
   resetBtn: document.getElementById('reset-btn'),
   guideBtn: document.getElementById('guide-btn'),
@@ -398,34 +399,231 @@ function syncHardCappedTool() {
   return false;
 }
 
-/** A sale, storm, or blocked seal borrows the status line, then the objective returns. */
+/** A sale, storm, or blocked seal shows on the status line, then that line clears. */
 const STATUS_BEAT_MS = 5600;
 let statusBeat = null;
 
-function currentObjective() {
-  if (!state) return 'Chop a tree, then sell the wood in Market (2).';
-  const workers = state.workers || [];
-  if (!workers.length) {
-    if ((state.coins || 0) >= nextWorkerCost(state)) return 'Hire a digger in Crew (3).';
-    return 'Chop a tree, then sell the wood in Market (2).';
+function hasPlacedBuilding(id) {
+  return !!state?.buildings?.some((b) => b.id === id);
+}
+
+function bagHad(key) {
+  return (state?.bags?.[key] || 0) > 0 || !!(state?.bagSeen && state.bagSeen[key]);
+}
+
+function seenDig(id) {
+  return !!(state?.seenTypes && state.seenTypes[id]);
+}
+
+function crewChoppingTrees() {
+  return !!state?.workers?.some((w) => w.digFilter === 'wood');
+}
+
+/** First-run menus stay hidden until each job is done. Prestige opens the dock for good. */
+function introOpen(id) {
+  if (!state) return false;
+  if ((state.prestige || 0) >= 1) return true;
+  const depth = state.world ? deepestClearedTowardCore(state.world) : 0;
+  const ownedUpgrade = (uid) => (state.upgrades?.[uid] || 0) > 0;
+  const oreSeen =
+    seenDig('coal') ||
+    seenDig('copper') ||
+    seenDig('iron') ||
+    bagHad('coal') ||
+    bagHad('copper') ||
+    bagHad('iron');
+  const crewHurt =
+    (state.tombstones || []).length > 0 ||
+    (state.workers || []).some(
+      (w) => (w.vitality ?? workerMaxVitality(state)) < workerMaxVitality(state) - 0.5
+    );
+  const horrors =
+    depth >= 0.38 || (state.monsters || []).length > 0 || hasPlacedBuilding('ward');
+  const phase = state.weather?.phase;
+  const needPump =
+    phase === 'warn' ||
+    phase === 'rain' ||
+    !!(state.tutorials && state.tutorials.rain_pump) ||
+    seenDig('aquifer') ||
+    !!(state.achievements && state.achievements.biome_aquifer) ||
+    hasPlacedBuilding('pump');
+  const echoNear =
+    (state.shards || 0) > 0 ||
+    (state.world && canPrestigeWorld(state.world)) ||
+    depth >= PRESTIGE_DEPTH_RATIO * 0.72;
+  const onTrees = crewChoppingTrees();
+  const bars = bagHad('ironBar');
+
+  switch (id) {
+    case 'dock:market':
+      return bagHad('wood') || (state.coins || 0) > 0;
+    case 'dock:build':
+      return (
+        bagHad('stone') ||
+        hasPlacedBuilding('grove') ||
+        onTrees ||
+        oreSeen ||
+        needPump ||
+        crewHurt ||
+        horrors ||
+        bars ||
+        hasPlacedBuilding('smelter') ||
+        depth >= 0.15
+      );
+    case 'dock:crew':
+      return hasPlacedBuilding('grove') || (state.workers || []).length > 0;
+    case 'dock:upgrades':
+      return onTrees || hasPlacedBuilding('shack') || Object.values(state.upgrades || {}).some((n) => n > 0);
+    case 'dock:prestige':
+      return echoNear;
+    case 'building:grove':
+      return bagHad('stone') || hasPlacedBuilding('grove');
+    case 'building:shack':
+      return onTrees || hasPlacedBuilding('shack');
+    case 'building:smelter':
+      return oreSeen || hasPlacedBuilding('smelter');
+    case 'building:pump':
+      return needPump;
+    case 'building:chapel':
+      return crewHurt || hasPlacedBuilding('chapel');
+    case 'building:ward':
+      return horrors;
+    case 'building:mine':
+      return bars || hasPlacedBuilding('mine');
+    case 'building:refinery':
+      return bars || hasPlacedBuilding('refinery');
+    case 'building:listening':
+      return hasPlacedBuilding('smelter') || hasPlacedBuilding('listening') || depth >= 0.15;
+    case 'upgrade:click_power':
+      return onTrees || ownedUpgrade('click_power');
+    case 'upgrade:pick_tier':
+      return bars || ownedUpgrade('pick_tier');
+    case 'upgrade:steel_tools':
+      return bagHad('steelBar') || ownedUpgrade('steel_tools');
+    case 'upgrade:blast':
+      return bars || ownedUpgrade('blast');
+    case 'upgrade:worker_speed':
+    case 'upgrade:worker_energy':
+      return crewHurt || ownedUpgrade(id.slice('upgrade:'.length));
+    case 'upgrade:mine_rate':
+      return bars || hasPlacedBuilding('mine') || ownedUpgrade('mine_rate');
+    case 'upgrade:smelt_rate':
+      return (
+        ((oreSeen || hasPlacedBuilding('smelter')) && (bagHad('coal') || seenDig('coal'))) ||
+        ownedUpgrade('smelt_rate')
+      );
+    case 'upgrade:drill_coil':
+      return bagHad('copperWire') || ownedUpgrade('drill_coil');
+    case 'upgrade:pump_coil':
+      return (hasPlacedBuilding('pump') && bagHad('copperWire')) || ownedUpgrade('pump_coil');
+    case 'upgrade:sell_bonus':
+      return bars || hasPlacedBuilding('smelter') || ownedUpgrade('sell_bonus');
+    case 'upgrade:focus_optics':
+      return (
+        (hasPlacedBuilding('listening') && bagHad('crystalLens')) ||
+        ownedUpgrade('focus_optics')
+      );
+    case 'upgrade:bright_wards':
+      return hasPlacedBuilding('ward') || ownedUpgrade('bright_wards');
+    case 'filter:idle':
+    case 'filter:wood':
+      return hasPlacedBuilding('grove') || (state.workers || []).length > 0;
+    case 'filter:soft':
+    case 'filter:stone':
+    case 'filter:auto':
+      return onTrees || hasPlacedBuilding('shack');
+    case 'heading:down':
+      return true;
+    case 'heading:widen':
+    case 'heading:toward_core':
+      return echoNear || (id === 'heading:toward_core' && towardCoreHeadingUnlocked());
+    case 'stance:work':
+      return true;
+    case 'stance:flee':
+    case 'stance:stand':
+      return horrors;
+    case 'demolish':
+      return (state.buildings || []).some((b) => !isStarterProtected(b));
+    default:
+      if (id.startsWith('filter:')) return onTrees || hasPlacedBuilding('shack');
+      return false;
   }
-  if (workers.some((w) => workerIsIdle(w))) return 'Set a dig target — they start idle.';
-  if (canPrestigeWorld(state.world)) return 'Prestige is ready in Echo (5).';
-  const seen = state.seenTypes || {};
-  const has = (id) => state.buildings.some((b) => b.id === id);
-  if (!has('grove') && (state.bags.stone || 0) >= 2) {
+}
+
+function crewHiredOnce() {
+  return (
+    (state.workersBought || 0) > 0 ||
+    (state.workers || []).length > 0 ||
+    (state.tombstones || []).length > 0
+  );
+}
+
+/** Trees is a one-time lesson. Switching orders or losing the crew does not bring it back. */
+function treesLessonDone() {
+  if (!state) return false;
+  if (state.introTrees) return true;
+  const workers = state.workers || [];
+  const movedOn = workers.some((w) => {
+    const f = w.digFilter || 'idle';
+    return f !== 'idle' && f !== 'wood';
+  });
+  if (
+    crewChoppingTrees() ||
+    movedOn ||
+    hasPlacedBuilding('shack') ||
+    hasPlacedBuilding('smelter') ||
+    ((state.workersBought || 0) > 0 && workers.length === 0)
+  ) {
+    state.introTrees = true;
+  }
+  return !!state.introTrees;
+}
+
+function currentObjective() {
+  if (!state) return 'Chop a tree on the sky pad.';
+  const coins = state.coins || 0;
+  const workers = state.workers || [];
+  if (!bagHad('wood') && coins <= 0 && !bagHad('stone')) return 'Chop a tree on the sky pad.';
+  if (coins <= 0 && bagHad('wood') && !bagHad('stone')) return 'Sell the wood in Market (2).';
+  if (!bagHad('stone')) return 'Dig down for stone.';
+  if (!hasPlacedBuilding('grove')) {
+    const need = nextBuildingCost('grove').coins || 0;
+    if (coins < need) return 'Sell wood in Market (2), then place a Grove house.';
     return 'Place a Grove house on the surface (Build 1).';
   }
+  if (!workers.length && !crewHiredOnce()) return 'Hire a digger in Crew (3).';
+  if (!treesLessonDone()) return 'Set a digger to Trees.';
+  if (canPrestigeWorld(state.world)) return 'Prestige is ready in Echo (5).';
   if (
-    !has('smelter') &&
-    (seen.coal || seen.copper || seen.iron || seen.gold || seen.crystal)
+    state.world &&
+    deepestClearedTowardCore(state.world) >= PRESTIGE_DEPTH_RATIO &&
+    countColumnsOpenToDepth(state.world, prestigeUnlockDepthY(state.world)) <
+      PRESTIGE_MIN_COLUMNS
+  ) {
+    return `Widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns.`;
+  }
+  if (
+    !hasPlacedBuilding('smelter') &&
+    (seenDig('coal') || seenDig('copper') || seenDig('iron'))
   ) {
     return 'Place a Smelter on the surface (Build 1).';
   }
-  return 'Dig the shaft deeper.';
+  return '';
+}
+
+function paintNextGoal() {
+  const hud = document.querySelector('.hud-top');
+  const goal = els.nextGoal;
+  if (!hud || !goal) return;
+  const text = state && (state.prestige || 0) < 1 ? currentObjective() : '';
+  const show = !!text;
+  hud.classList.toggle('has-goal', show);
+  goal.classList.toggle('hidden', !show);
+  if (show && goal.textContent !== text) goal.textContent = text;
 }
 
 function paintStatusBar() {
+  paintNextGoal();
   if (!els.status) return;
   if (statusBeat && performance.now() < statusBeat.until) {
     if (statusBeat.html != null) {
@@ -436,8 +634,8 @@ function paintStatusBar() {
     return;
   }
   statusBeat = null;
-  const next = currentObjective();
-  if (els.status.textContent !== next) els.status.textContent = next;
+  if (els.status.textContent) els.status.textContent = '';
+  if (els.status.innerHTML) els.status.innerHTML = '';
 }
 
 function setGuideOpen(open) {
@@ -778,6 +976,7 @@ function createRunState(
     shardUpgrades: shardUpgrades || blankShardUpgrades(),
     workers: [],
     workersBought: 0,
+    introTrees: false,
     buildings: [],
     monsters: [],
     tombstones: [],
@@ -1047,7 +1246,7 @@ function towardCoreHeadingUnlocked() {
 
 function ensureWorkerDigHeading(w) {
   const h = digHeadingById(w.digHeading || 'down');
-  if (h.requireSense && !towardCoreHeadingUnlocked()) {
+  if (!introOpen(`heading:${h.id}`) || (h.requireSense && !towardCoreHeadingUnlocked())) {
     w.digHeading = 'down';
     return digHeadingById('down');
   }
@@ -1141,20 +1340,20 @@ function digFilterUnlocked(f, seen) {
 function digFiltersForOrders() {
   refreshSeenTypes();
   const seen = state.seenTypes || blankSeenTypes();
-  return DIG_FILTERS.filter((f) => digFilterUnlocked(f, seen));
+  return DIG_FILTERS.filter((f) => digFilterUnlocked(f, seen) && introOpen(`filter:${f.id}`));
 }
 
-/** Keep a worker's dig filter if still valid; otherwise fall back to Anything. Call after refreshSeenTypes. */
+/** Keep a worker's dig filter if still valid; otherwise fall back to Idle. Call after refreshSeenTypes. */
 function ensureWorkerDigFilter(w) {
   if (!w) return;
-  const id = w.digFilter || 'auto';
+  const id = w.digFilter || 'idle';
   const f = digFilterById(id);
   const seen = state.seenTypes || blankSeenTypes();
-  if (digFilterUnlocked(f, seen)) {
+  if (digFilterUnlocked(f, seen) && introOpen(`filter:${f.id}`)) {
     w.digFilter = f.id;
     return;
   }
-  w.digFilter = 'auto';
+  w.digFilter = 'idle';
 }
 
 function serialize() {
@@ -1168,6 +1367,7 @@ function serialize() {
     upgrades: state.upgrades,
     shardUpgrades: state.shardUpgrades,
     workersBought: state.workersBought,
+    introTrees: !!state.introTrees,
     workers: state.workers.map((w) => ({
       uid: w.uid,
       x: w.x,
@@ -1272,6 +1472,7 @@ function hydrate(data) {
     upgrades: { ...blankUpgrades(), ...(data.upgrades || {}) },
     shardUpgrades: { ...blankShardUpgrades(), ...(data.shardUpgrades || {}) },
     workersBought: data.workersBought || 0,
+    introTrees: !!data.introTrees,
     workers: (data.workers || []).map((w) => ({
       uid: w.uid || allocId('w'),
       x: w.x,
@@ -1599,6 +1800,8 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
 
 /** Aquifer breach — dump water into the shaft (pumps still help). */
 function onAquiferBreach(tx, ty) {
+  if (!state.seenTypes) state.seenTypes = blankSeenTypes();
+  state.seenTypes.aquifer = true;
   const cols = ensureFloodCols();
   cols[tx] = Math.min(WEATHER.FLOOD_MAX, (cols[tx] || 0) + BIOME.AQUIFER_FLOOD);
   // Equalize into connected basins immediately
@@ -3441,9 +3644,14 @@ function renderBagBar() {
   for (const group of RESOURCE_GROUPS) {
     const visible = group.keys.filter((k) => {
       const n = state.bags[k] || 0;
-      if (n > 0) return true;
-      if (BAG_PINNED.includes(k)) return true;
-      return !!state.bagSeen[k];
+      if (k === 'wood') return true;
+      if ((state.prestige || 0) >= 1) {
+        if (n > 0) return true;
+        if (BAG_PINNED.includes(k)) return true;
+        return !!state.bagSeen[k];
+      }
+      if (k === 'stone') return n > 0 || bagHad('stone') || (state.coins || 0) > 0;
+      return n > 0 || bagHad(k);
     });
     if (!visible.length) continue;
     const chips = [];
@@ -3540,7 +3748,7 @@ function renderBuildHotbar() {
   for (const group of BUILDING_GROUPS) {
     const defs = group.ids
       .map((id) => BUILDINGS[id])
-      .filter((b) => b && isHotbarBuilding(b));
+      .filter((b) => b && isHotbarBuilding(b) && introOpen(`building:${b.id}`));
     if (!defs.length) continue;
     appendShopGroup(els.hotbar, group.label);
     for (const b of defs) {
@@ -3550,10 +3758,11 @@ function renderBuildHotbar() {
   }
   // Any new hotbar building not yet grouped
   for (const b of Object.values(BUILDINGS)) {
-    if (!isHotbarBuilding(b) || listed.has(b.id)) continue;
+    if (!isHotbarBuilding(b) || listed.has(b.id) || !introOpen(`building:${b.id}`)) continue;
     els.hotbar.appendChild(makeBuildPlaceButton(b));
   }
 
+  if (introOpen('demolish')) {
   const demoBtn = document.createElement('button');
   demoBtn.type = 'button';
   demoBtn.className =
@@ -3574,6 +3783,7 @@ function renderBuildHotbar() {
     renderUi();
   });
   els.hotbar.appendChild(demoBtn);
+  }
 }
 
 function appendCoinUpgradeRow(parent, u) {
@@ -3662,7 +3872,7 @@ function renderUpgradeShop() {
     const active = [];
     for (const id of group.ids) {
       const u = byId[id];
-      if (!u) continue;
+      if (!u || !introOpen(`upgrade:${u.id}`)) continue;
       listed.add(id);
       const level = state.upgrades[u.id] || 0;
       if (level >= u.max) maxed.push(u);
@@ -3673,7 +3883,7 @@ function renderUpgradeShop() {
     for (const u of active) appendCoinUpgradeRow(els.upgrades, u);
   }
   for (const u of UPGRADES) {
-    if (listed.has(u.id)) continue;
+    if (listed.has(u.id) || !introOpen(`upgrade:${u.id}`)) continue;
     const level = state.upgrades[u.id] || 0;
     if (level >= u.max) maxed.push(u);
     else {
@@ -3850,6 +4060,10 @@ function renderPrestigePayout() {
 function renderUi() {
   // Hire not purchaseable / building at max → dig/chop
   syncHardCappedTool();
+  if (tool === 'demolish' && !introOpen('demolish')) tool = null;
+  else if (tool && tool !== 'worker' && tool !== 'demolish' && BUILDINGS[tool] && !introOpen(`building:${tool}`)) {
+    tool = null;
+  }
 
   els.coins.textContent = String(Math.floor(state.coins));
   els.shards.textContent = String(state.shards);
@@ -3958,6 +4172,7 @@ function canAffordAnyBuilding() {
   if (!state) return false;
   for (const b of Object.values(BUILDINGS)) {
     if (!isHotbarBuilding(b)) continue;
+    if (!introOpen(`building:${b.id}`)) continue;
     if (buildingAtCap(b.id)) continue;
     if (cheatCanAfford(nextBuildingCost(b.id))) return true;
   }
@@ -3987,6 +4202,7 @@ function canAffordAnyUpgrade() {
   for (const u of UPGRADES) {
     const level = state.upgrades[u.id] || 0;
     if (level >= u.max) continue;
+    if (!introOpen(`upgrade:${u.id}`)) continue;
     const cost = upgradeCost(u, level);
     if (state.coins < cost) continue;
     if (u.needsBars && (state.bags.ironBar || 0) < 1 + level) continue;
@@ -4020,10 +4236,16 @@ function refreshMenuBadges() {
     upgrades: canAffordAnyUpgrade(),
     prestige: canPrestigeWorld(state.world) || canAffordAnyShardUpgrade(),
   };
+  let closeDock = false;
   for (const btn of rail.querySelectorAll('[data-dock]')) {
     const id = btn.getAttribute('data-dock');
-    btn.classList.toggle('has-action', !!flags[id]);
+    const open = introOpen(`dock:${id}`);
+    btn.classList.toggle('is-intro-hidden', !open);
+    btn.hidden = !open;
+    if (!open && activeDockPanel === id) closeDock = true;
+    btn.classList.toggle('has-action', open && !!flags[id]);
   }
+  if (closeDock) setDockPanel(null);
 }
 
 function renderAchievements() {
@@ -4231,7 +4453,7 @@ function tickMarketAutoSell() {
   }
   if (parts.length === 0) return false;
   setStatus(`Auto-sold ${parts.join(', ')} for ${totalCoins}c.`);
-  showTutorial('dig_stone');
+  if (!bagHad('stone')) showTutorial('dig_stone');
   sfx.coin();
   save();
   return true;
@@ -4369,6 +4591,21 @@ function appendMarketRow(key, meta) {
   els.market.appendChild(row);
 }
 
+function marketKeyVisible(key) {
+  const have = state.bags[key] || 0;
+  const explicitKeep = marketKeepByKey[key] !== undefined && marketKeepAmount(key) > 0;
+  const stocked = have > 0 || marketAutoOn(key) || explicitKeep;
+  if ((state.prestige || 0) >= 1) {
+    return have > 0 || BAG_PINNED.includes(key) || marketAutoOn(key) || marketKeepAmount(key) > 0;
+  }
+  if (key === 'wood') return introOpen('dock:market');
+  if (key === 'stone') return bagHad('stone') || have > 0;
+  if (key === 'coal' || key === 'copper' || key === 'iron' || key === 'gold' || key === 'crystal') {
+    return seenDig(key) || bagHad(key) || have > 0;
+  }
+  return stocked || bagHad(key);
+}
+
 function renderMarketPanel() {
   if (!els.market || !els.marketHint) return;
   const open = hasMarket();
@@ -4382,14 +4619,7 @@ function renderMarketPanel() {
     const keys = group.keys.filter((key) => {
       const meta = RESOURCE_META[key];
       if (!meta || resourceSellPrice(state, key) <= 0) return false;
-      const have = state.bags[key] || 0;
-      // Stocked, pinned staples, autosell, or keep reserve
-      return (
-        have > 0 ||
-        BAG_PINNED.includes(key) ||
-        marketAutoOn(key) ||
-        marketKeepAmount(key) > 0
-      );
+      return marketKeyVisible(key);
     });
     if (!keys.length) continue;
     appendShopGroup(els.market, group.label);
@@ -4421,7 +4651,7 @@ function doMarketSell(key, amount) {
   const name = RESOURCE_META[key]?.name || key;
   noteMarketSale(key);
   setStatus(`Sold ${result.sold} ${name} for ${result.coins}c.`);
-  showTutorial('dig_stone');
+  if (!bagHad('stone')) showTutorial('dig_stone');
   sfx.coin();
   save();
   renderUi();
@@ -4494,6 +4724,7 @@ function renderOrdersPanel() {
   headGrid.className = 'filter-grid';
   const coreUnlocked = towardCoreHeadingUnlocked();
   for (const h of DIG_HEADINGS) {
+    if (!introOpen(`heading:${h.id}`)) continue;
     const locked = !!(h.requireSense && !coreUnlocked);
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -4534,6 +4765,7 @@ function renderOrdersPanel() {
   const stanceGrid = document.createElement('div');
   stanceGrid.className = 'filter-grid';
   for (const s of DIG_STANCES) {
+    if (!introOpen(`stance:${s.id}`)) continue;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className =
@@ -5065,6 +5297,7 @@ function setDockPanel(id) {
 /** Rail / digit shortcut: open panel, or close if that panel is already active. */
 function selectDockPanel(id) {
   if (!DOCK_PANEL_IDS.includes(id)) return;
+  if (!introOpen(`dock:${id}`)) return;
   if (activeDockPanel === id) {
     setDockPanel(null);
     return;

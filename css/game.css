@@ -308,6 +308,35 @@ body {
   text-overflow: ellipsis;
 }
 
+.next-goal {
+  grid-area: brand;
+  display: none;
+  margin: 0;
+  min-width: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: var(--brass-hi);
+}
+
+.hud-top.has-goal .brand {
+  display: none;
+}
+
+.hud-top.has-goal .next-goal {
+  display: block;
+}
+
+.next-goal::before {
+  content: 'Next';
+  display: block;
+  margin-bottom: 0.15rem;
+  font-family: var(--pixel);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .meter.is-idle {
   display: none;
 }
@@ -1521,6 +1550,10 @@ a.btn:hover {
   display: block;
 }
 
+.menu-rail .hot-slot.is-intro-hidden {
+  display: none;
+}
+
 /* Legacy hotbar class kept for any leftover refs */
 .hotbar {
   display: flex;
@@ -2173,6 +2206,11 @@ a.btn:hover {
     grid-template-columns: 1fr;
     grid-template-areas: "meters";
   }
+
+  .hud-top.has-goal {
+    grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr);
+    grid-template-areas: "brand meters";
+  }
 }
 
 @media (max-width: 980px) {
@@ -2223,6 +2261,10 @@ a.btn:hover {
     grid-template-columns: 1fr;
     grid-template-areas: "meters";
     gap: 0.4rem 0.5rem;
+  }
+
+  .hud-top.has-goal {
+    grid-template-areas: "brand" "meters";
   }
 
   .meters {
