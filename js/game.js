@@ -43,6 +43,7 @@ import {
   PRESTIGE_MIN_COLUMNS,
   prestigeDepthShards,
   tutorialById,
+  tileMaxHp,
   scaleBuildingCost,
   shardUpgradeCost,
   upgradeCost,
@@ -849,15 +850,16 @@ function tipLinesFromTile(t, x, y) {
     }
     return lines;
   }
-  const maxHp = def.hardness || 0;
-  const hp = Math.max(0, Math.ceil(state.world.hp[t.i]));
+  const maxHp = Math.ceil(
+    tileMaxHp(t.id, y - state.world.surfaceY, state.prestige || 0) || def.hardness || 0
+  );
+  const hp = Math.min(maxHp, Math.max(0, Math.ceil(state.world.hp[t.i])));
   lines.push({ text: `HP ${hp}/${maxHp}` });
   for (const row of digTipStatusLines(t.id, x, y)) lines.push(row);
   const cube = cubeTipLines(t.id);
   if (cube) {
     for (const text of cube) lines.push({ text, muted: true });
   } else {
-    lines.push({ text: `Hardness ${def.hardness || 0}`, muted: true });
     if (def.drops) {
       const drop = Object.entries(def.drops)
         .map(([k, v]) => `${v} ${k}`)
@@ -6074,10 +6076,11 @@ function bindCheats() {
   }
 }
 
-/** Status line always; one-shot chop tip if it has not been dismissed. */
+/** Status line always; cube welcome, then the chop tip, if each is still unseen. */
 function openOpeningGuidance() {
   statusBeat = null;
   paintStatusBar();
+  showTutorial('welcome');
   showTutorial('start_chop');
 }
 

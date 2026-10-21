@@ -1,4 +1,4 @@
-import { digFilterById, TILE, TILES } from './data.js';
+import { digFilterById, TILE, TILES, tileMaxHp } from './data.js';
 import { drawBuildingSprite, drawPineTreeSprite, pxRect as fillPxRect } from './sprites.js';
 import { isExposed, isRevealed } from './world.js';
 
@@ -575,8 +575,8 @@ export function createRenderer(canvas) {
           ctx.globalAlpha = 1;
         }
 
-        const maxHp = Math.max(1, def.hardness);
-        if (world.hp[i] < maxHp) {
+        const maxHp = tileMaxHp(id, y - world.surfaceY, state.prestige || 0) || def.hardness;
+        if (maxHp > 0 && world.hp[i] < maxHp - 0.05) {
           const hurt = 1 - world.hp[i] / maxHp;
           ctx.fillStyle = `rgba(0,0,0,${0.12 + hurt * 0.4})`;
           ctx.fillRect(px, py, cw, ch * Math.min(1, hurt * 0.85));

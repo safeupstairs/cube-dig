@@ -2066,7 +2066,7 @@ a.btn:hover {
 
 .tutorial-card #tutorial-body {
   margin: 0 0 1rem;
-  white-space: normal;
+  white-space: pre-wrap;
   font-size: 1rem;
   line-height: 1.45;
   color: var(--text);

@@ -413,7 +413,8 @@ function pageHome() {
     </p>
     <section class="wiki-section" id="tutorial">
       <h2>Tutorial</h2>
-      <p>You start with no coins. On the first dig, each menu appears after the job that needs it:</p>
+      <p>A cube is buried under the village. Dig to it. Crack it. That welcome is the first popup, and it says the top left shows the next step. The chop tip says the same.</p>
+      <p>On the first dig, each menu appears after the job that needs it:</p>
       <ol>
         <li>Click a ${tileLink('tree')} on the surface to chop it. The wood goes in your bag.</li>
         <li>${link('#/mechanic/market', 'Market')} (key 2) appears once wood is in the bag. Sell it.</li>
@@ -519,7 +520,7 @@ function pageTile(id) {
     <section class="wiki-section">
       <h2>Notes</h2>
       <ul>
-        <li>Hardness is hit points at dig power 1; pick tier and shards raise scratch gates.</li>
+        <li>Hardness is the base hit points at dig power 1. Stone, coal, iron, gold, and crystal past depth 10 gain a little more, and the cursor shows remaining over that full bar. Pick tier and shards raise scratch gates.</li>
         ${hazardNote ? `<li>${esc(hazardNote)}</li>` : ''}
         ${id === 'core' ? '<li>Core usually needs prestige ×5 and pick/seal investment.</li>' : ''}
         ${id === 'seal' ? '<li>Seals drop ◆. Prestige ×1 unlocks the attempt and trims hit points on a new dig. Scratching one needs Iron-bound pick level 6 with no shards — Seal splitter or Inheritance can lower that. Steel tools and Heavier pick only speed the hits.</li>' : ''}

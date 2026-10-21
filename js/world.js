@@ -5,6 +5,7 @@ import {
   PRESTIGE_DEPTH_RATIO,
   PRESTIGE_MIN_COLUMNS,
   TILES,
+  tileMaxHp,
 } from './data.js';
 
 const IDS = [
@@ -44,7 +45,6 @@ export function generateWorld(prestige = 0, seed = 42) {
   const idIndex = Object.fromEntries(IDS.map((id, i) => [id, i]));
 
   const crustShrink = Math.min(10, prestige * 1.1);
-  const sealWeak = prestige * 3;
   const surfaceY = 5;
   const shellR = CUBE_SHELL_R;
 
@@ -82,19 +82,7 @@ export function generateWorld(prestige = 0, seed = 42) {
     Math.sin(x * 0.21 + seed * 0.01) * 4.2 + Math.sin(x * 0.051 + seed * 0.03) * 2.8;
 
   const setTileHp = (i, kind, depth) => {
-    const def = TILES[kind];
-    let hits = def.hardness;
-    if (
-      kind === 'stone' ||
-      kind === 'coal' ||
-      kind === 'iron' ||
-      kind === 'gold' ||
-      kind === 'crystal'
-    ) {
-      hits += Math.max(0, (depth - 10) * 0.12);
-    }
-    if (kind === 'seal' || kind === 'core') hits = Math.max(20, hits - sealWeak);
-    hp[i] = hits;
+    hp[i] = tileMaxHp(kind, depth, prestige);
   };
 
   // Base crust: sky / soil / stone / cube — ores come from vein pass below.

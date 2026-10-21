@@ -12,8 +12,8 @@ export const CUBE_SHELL_R = 11;
 export const TILE = 16;
 
 /**
- * hardness ≈ hit points at dig power 1.
- * Soft surface still takes a few hits; deep rock / cube layers bite harder.
+ * hardness is base hit points at dig power 1.
+ * Stone and ore past depth 10 gain a little more. See tileMaxHp.
  */
 export const TILES = {
   empty: { name: 'Shaft', color: '#1a2228', diggable: false, hardness: 0 },
@@ -107,6 +107,18 @@ export const TILES = {
     coins: 0,
   },
 };
+
+/** Full hit points for a fresh tile. Matches world generation. */
+const DEPTH_HP_KINDS = new Set(['stone', 'coal', 'iron', 'gold', 'crystal']);
+
+export function tileMaxHp(kind, depth, prestige = 0) {
+  const base = TILES[kind]?.hardness || 0;
+  if (!base) return 0;
+  let hits = base;
+  if (DEPTH_HP_KINDS.has(kind)) hits += Math.max(0, (depth - 10) * 0.12);
+  if (kind === 'seal' || kind === 'core') hits = Math.max(20, hits - (prestige || 0) * 3);
+  return hits;
+}
 
 /** Dig-hazard tuning for aquifer / lava / gas biomes. */
 export const BIOME = {
@@ -1035,14 +1047,19 @@ export function achievementById(id) {
 
 /**
  * One-shot guidance tips. Sticky across prestige; cleared only on hard reset.
- * Early ladder: chop → sell wood → dig stone → grove → crew on trees.
+ * Opening: cube welcome, then chop. Early ladder: chop → sell wood → dig stone → grove → crew on trees.
  * Situational: rain / ore / biomes / seal / prestige.
  */
 export const TUTORIAL_TIPS = [
   {
+    id: 'welcome',
+    title: 'The Cube Dig',
+    text: 'A cube is buried under the village. Dig to it. Crack it.\n\nCut a shaft down through the rock. Sell what you bring up, hire diggers, and keep going. What sits inside the cube is yours to find.\n\nThe top left shows the next step.',
+  },
+  {
     id: 'start_chop',
     title: 'Chop wood',
-    text: 'Chop a tree on the sky pad. The wood goes in your bag.',
+    text: 'Chop a tree on the sky pad. The wood goes in your bag. The top left shows the next step.',
   },
   {
     id: 'dig_stone',
@@ -1136,7 +1153,7 @@ export const WIKI_SECTIONS = [
     id: 'overview',
     title: 'How to dig',
     paragraphs: [
-      'You start with no coins. On a first dig the menus arrive one job at a time: chop a tree, sell the wood, dig down for stone, place a Grove house, then set a digger to Trees. After the first prestige every menu stays open.',
+      'A cube is buried under the village. Dig to it. Crack it. That welcome is the first popup on a new dig, and it says the top left shows the next step. The next tip is to chop a tree, and it says the same. On a first dig the menus arrive one job at a time: chop a tree, sell the wood, dig down for stone, place a Grove house, then set a digger to Trees. After the first prestige every menu stays open.',
       'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. On a first dig the next step sits in the top left until that job is done, then the corner stays quiet until a specific job. Once depth reaches the prestige line, the top left asks you to widen the shaft to 3 columns. The status line under the bags reports a sale, a storm, or a seal the pick cannot scratch.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Buying Inheritance adds its wood and stone to this dig as well (iron bars from level 2). Hard reset clears everything including tips.',
