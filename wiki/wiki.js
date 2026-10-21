@@ -421,6 +421,8 @@ function pageHome() {
         <li>Dig down for ${itemLink('stone')}. The stone chip appears. Build is still closed.</li>
         <li>${link('#/buildings', 'Build')} (key 1) lists a ${buildingLink('grove')}. Place it on the surface.</li>
         <li>${link('#/mechanic/crew', 'Crew')} (key 3) appears. Hire a digger and set them to Trees.</li>
+        <li>Build then lists a ${buildingLink('shack')}. Put it in the shaft so diggers rest nearby instead of walking back to the surface cottage.</li>
+        <li>Dig down until coal, copper, or iron shows, then place a ${buildingLink('smelter')}.</li>
       </ol>
       <p>
         After that, the rest of the first dig opens one system at a time: a Shack and the Shop once a digger is chopping trees,
@@ -434,7 +436,7 @@ function pageHome() {
         Dig by clicking an exposed face: a tile touching open shaft or sky.
         The cursor tip names the tile, its hit points, whether you can dig it, and what it drops.
         The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops.
-        On a first dig the next step sits in the top left until that job is done. Hire and Trees are shown once. After that the corner stays quiet until a specific job, such as a smelter. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns, then says prestige is ready. The status line under the bags reports what just happened.
+        On a first dig the next step stays in the top left. Hire and Trees are shown once. After Trees it asks for a Shack, then to dig until coal, copper, or iron. A storm tells you to build a Shaft pump, and that pump appears in Build for a storm or a sighted aquifer. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns, then says prestige is ready. The status line under the bags reports what just happened.
         More on ${link('#/mechanic/digging', 'digging')}.
       </p>
       <p>
@@ -494,7 +496,7 @@ function pageTile(id) {
   if (!t) return notFound('Tile', id);
   const hazardNote =
     id === 'aquifer'
-      ? `Breaching dumps ~${BIOME.AQUIFER_FLOOD} flood volume into the shaft.`
+      ? `Breaching dumps ~${BIOME.AQUIFER_FLOOD} flood volume into the shaft. A Shaft pump covering the tile swallows that flood.`
       : id === 'lava'
         ? `Standing beside revealed lava drains ~${BIOME.LAVA_BURN_PER_SEC}/s vitality; breach hit ${BIOME.LAVA_BREACH_DAMAGE}.`
         : id === 'gas'
@@ -788,7 +790,7 @@ function mechanicBody(id) {
         <p>On a first dig the dock stays closed until you chop, sell wood, dig stone, and place a grove. Crew orders start at Idle and Trees. The first prestige leaves every menu open. Fog still hides dig targets until those tiles are revealed.</p>
         <p>Click exposed diggable faces or hire crew. Dig power rises from Heavier pick, Steel tools, and Echo muscle. Blast charges sometimes crack an adjacent tile when a block breaks (you, crew, or a drill). Gold, crystal, and shell need Iron-bound pick before they can be scratched. A seal needs Iron-bound pick level 6 (Seal splitter or Inheritance can lower that). Steel tools only speed the hits. Prestige trims seal and core hit points on a new dig; it does not raise the scratch gate. The core also needs prestige ×5.</p>
         <ul>
-          <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). On a first dig the next step sits in the top left until that job is done, then the corner stays quiet until a specific job. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns. The status line reports what just happened.</li>
+          <li>The cursor tip names the tile under the pointer (name, hit points, whether you can dig it, drops). On a first dig the next step stays in the top left. After Trees it asks for a Shack, then to dig until coal, copper, or iron. Once depth reaches the prestige line, the top left asks you to widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns. The status line reports what just happened.</li>
           <li>Drag diggers on the map. After resting at a shack, they return to their last dig stand; tree cutters walk to the nearest tree.</li>
           <li>${buildingLink('mine')} drills prefer deeper tiles, then creep down the shaft (fog OK; skip cube layers).</li>
           <li>Filters & headings live in Crew → Orders.</li>
@@ -840,7 +842,7 @@ function mechanicBody(id) {
     case 'hazards':
       return `
         <ul>
-          <li>${tileLink('aquifer')} — flood on breach. On a first dig, seeing one opens the ${buildingLink('pump')} in Build.</li>
+          <li>${tileLink('aquifer')} — flood on breach, unless a ${buildingLink('pump')} covers the tile and swallows it. On a first dig, seeing one opens the pump in Build.</li>
           <li>${tileLink('lava')} — burn while adjacent.</li>
           <li>${tileLink('gas')} — explosion on crack.</li>
         </ul>

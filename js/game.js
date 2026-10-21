@@ -584,6 +584,10 @@ function currentObjective() {
   if (!state) return 'Chop a tree on the sky pad.';
   const coins = state.coins || 0;
   const workers = state.workers || [];
+  const storm = state.weather?.phase;
+  if ((storm === 'warn' || storm === 'rain') && !hasPlacedBuilding('pump')) {
+    return 'Build a Shaft pump near the dig (Build 1).';
+  }
   if (!bagHad('wood') && coins <= 0 && !bagHad('stone')) return 'Chop a tree on the sky pad.';
   if (coins <= 0 && bagHad('wood') && !bagHad('stone')) return 'Sell the wood in Market (2).';
   if (!bagHad('stone')) return 'Dig down for stone.';
@@ -603,11 +607,19 @@ function currentObjective() {
   ) {
     return `Widen the shaft to ${PRESTIGE_MIN_COLUMNS} columns.`;
   }
+  if (!hasPlacedBuilding('shack')) {
+    const need = nextBuildingCost('shack').coins || 0;
+    if (coins < need) return 'Sell wood in Market (2), then build a Shack in the shaft.';
+    return 'Build a Shack in the shaft (Build 1), so diggers rest nearby instead of walking back up.';
+  }
   if (
     !hasPlacedBuilding('smelter') &&
     (seenDig('coal') || seenDig('copper') || seenDig('iron'))
   ) {
     return 'Place a Smelter on the surface (Build 1).';
+  }
+  if (!seenDig('coal') && !seenDig('copper') && !seenDig('iron')) {
+    return 'Dig down until you hit coal, copper, or iron.';
   }
   return '';
 }
@@ -1782,7 +1794,7 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   } else if (hazardNote) {
     setStatus(hazardNote);
   }
-  refreshSeenTypes();
+  if (refreshSeenTypes()) renderUi();
   checkDepthAchievements();
   // Ore tip from breaking; ambient reveal tips if no beat tip fired
   let tipped = false;
@@ -1800,10 +1812,16 @@ function digAt(tx, ty, power, fromPlayerOrOpts = false) {
   return true;
 }
 
-/** Aquifer breach — dump water into the shaft (pumps still help). */
+/** Aquifer breach — a covering pump swallows the flood; otherwise it fills the shaft. */
 function onAquiferBreach(tx, ty) {
   if (!state.seenTypes) state.seenTypes = blankSeenTypes();
   state.seenTypes.aquifer = true;
+  if (anyPumpCoversTile(tx, ty)) {
+    fx.burst(tx, ty, '#4a8ab0', 10);
+    fx.floatText(tx, ty - 0.3, 'pumped', '#7ab0d0');
+    sfx.thunder(0.12);
+    return `Aquifer breached at (${tx},${ty}) — the pump swallowed the flood.`;
+  }
   const cols = ensureFloodCols();
   cols[tx] = Math.min(WEATHER.FLOOD_MAX, (cols[tx] || 0) + BIOME.AQUIFER_FLOOD);
   // Equalize into connected basins immediately
@@ -2770,6 +2788,7 @@ function setWeatherPhase(phase) {
     showTutorial('rain_pump');
   }
   refreshWeatherHud();
+  renderUi();
 }
 
 function refreshWeatherHud() {
@@ -5815,9 +5834,8 @@ function loop(ts) {
           refreshCrewMeters();
           refreshMenuBadges();
           if (refreshSeenTypes()) {
-            // Fog just exposed a gated type — unlock dig filters without full shop rebuild
-            if (selectedWorkerId) renderOrdersPanel();
             fireRevealTutorials();
+            renderUi();
           }
           checkDepthAchievements();
         }

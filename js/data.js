@@ -403,7 +403,7 @@ export const BUILDINGS = {
     role: 'Drainage',
     cost: { coins: 25, wood: 4, stone: 5 },
     blurb:
-      'Clears a visible dry Manhattan pocket and drains flood volume — still works when submerged. Without pumps, floodwater rises and wears diggers standing in it. Each extra pump costs more.',
+      'Clears a visible dry Manhattan pocket and drains flood volume — still works when submerged. An aquifer broken inside that pocket is swallowed, not pushed up the shaft. Without pumps, floodwater rises and wears diggers standing in it. Each extra pump costs more.',
     color: '#4a6a7a',
   },
   ward: {
@@ -1099,7 +1099,7 @@ export const TUTORIAL_TIPS = [
   {
     id: 'aquifer_tip',
     title: 'Aquifer',
-    text: 'Aquifer ahead — breaching it floods the shaft. Keep a pump nearby before you dig it out.',
+    text: 'Aquifer ahead. A Shaft pump covering it swallows the flood. Without one, the breach fills the shaft.',
   },
   {
     id: 'gas_tip',
@@ -1154,7 +1154,7 @@ export const WIKI_SECTIONS = [
     title: 'How to dig',
     paragraphs: [
       'A cube is buried under the village. Dig to it. Crack it. That welcome is the first popup on a new dig, and it says the top left shows the next step. The next tip is to chop a tree, and it says the same. On a first dig the menus arrive one job at a time: chop a tree, sell the wood, dig down for stone, place a Grove house, then set a digger to Trees. After the first prestige every menu stays open.',
-      'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. On a first dig the next step sits in the top left until that job is done, then the corner stays quiet until a specific job. Once depth reaches the prestige line, the top left asks you to widen the shaft to 3 columns. The status line under the bags reports a sale, a storm, or a seal the pick cannot scratch.',
+      'The cursor tip names the tile under the pointer: name, hit points, whether you can dig it, and drops. On a first dig the next step stays in the top left: after Trees it asks for a Shack, then to dig until coal, copper, or iron. A storm tells you to build a Shaft pump; seeing an aquifer unlocks that pump in Build too. Once depth reaches the prestige line, the top left asks you to widen the shaft to 3 columns. The status line under the bags reports a sale, a storm, or a seal the pick cannot scratch.',
       'Named layers mark the dig: Sod → Crust → Veins → Dread → Shell → Seals → Core (HUD label beside Depth).',
       'Dig exposed faces (or assign crew). Prestige at 25% depth with a 3-wide open shaft — ◆ shards and permanent upgrades stay forever. Deeper and wider shafts pay more ◆; the Echo page shows the grant. The next dig starts with 4 wood and 2 stone. Buying Inheritance adds its wood and stone to this dig as well (iron bars from level 2). Hard reset clears everything including tips.',
       'A seal needs Iron-bound pick level 6 to scratch, unless Seal splitter or Inheritance lowers that. Steel tools and Heavier pick only speed the hits. Prestige ×1 unlocks the attempt; it does not raise scratch.',
@@ -1217,7 +1217,7 @@ export const WIKI_SECTIONS = [
     id: 'hazards',
     title: 'Weather & biomes',
     paragraphs: [
-      'Rare storms flood connected shafts from the bottom. Shaft pumps drain volume (even when submerged) and keep diggers dry in a Manhattan radius; Pump coils (copper wire) widen that radius.',
+      'Rare storms flood connected shafts from the bottom. Shaft pumps drain volume (even when submerged) and keep diggers dry in a Manhattan radius; an aquifer broken inside that radius is swallowed instead of flooding the shaft above. Pump coils (copper wire) widen that radius.',
       'Aquifers dump water when breached; lava burns diggers beside it; gas pockets explode when cracked.',
     ],
   },
